@@ -98,17 +98,27 @@ PUBLIC INLINE void apply_closure(VMSTATE vms, OVECTOR closure, VECTOR argvec) {
   if (closure == NULL || TAGGEDP(closure)) {
     vm_raise(vms, (OBJ) newsym("invalid-callable"), (OBJ) closure);
   } else if (closure->type == T_PRIM) {
-    prim_fn fnp = lookup_prim(NUM(AT(closure, PR_NUMBER)));
+    int primargc;
+    prim_fn fnp = lookup_prim(NUM(AT(closure, PR_NUMBER)), &primargc);
 
-    if (fnp != NULL)
-      vms->r->vm_acc = fnp(vms, argvec);
-    else
+    if (fnp != NULL) {
+      if ((primargc >= 0 && argvec->_.length-1 != primargc) ||
+	  (primargc < 0 && argvec->_.length-1 < -primargc))
+	vm_raise(vms, (OBJ) newsym("wrong-argc"), (OBJ) closure);
+      else
+	vms->r->vm_acc = fnp(vms, argvec);
+    } else
       vm_raise(vms, (OBJ) newsym("invalid-primitive"), AT(closure, PR_NUMBER));
   } else if (closure->type == T_CLOSURE) {
     OVECTOR meth = (OVECTOR) AT(closure, CL_METHOD);
 
     if (!MS_CAN_X(meth, vms->r->vm_effuid)) {
       vm_raise(vms, (OBJ) newsym("no-permission"), AT(meth, ME_NAME));
+      return;
+    }
+
+    if (argvec->_.length-1 != NUM(AT(meth, ME_ARGC))) {
+      vm_raise(vms, (OBJ) newsym("wrong-argc"), (OBJ) meth);
       return;
     }
 
@@ -715,10 +725,16 @@ PUBLIC void run_vm(VMSTATE vms) {
 	  NOPERMISSION((OBJ) methname);
 	}
 
+	vm_hold = POP();
+	if (vm_hold->length-1 != NUM(AT(method, ME_ARGC))) {
+	  vm_raise(vms, (OBJ) newsym("wrong-argc"), (OBJ) methname);
+	  break;
+	}
+
 	vms->c.vm_ip += 2;
 	push_frame(vms);
 
-	vms->r->vm_env = (VECTOR) POP();
+	vms->r->vm_env = (VECTOR) vm_hold;
 	ATPUT(vms->r->vm_env, 0, AT(method, ME_ENV));
 	vms->r->vm_code = (BVECTOR) AT(method, ME_CODE);
 	vms->r->vm_lits = (VECTOR) AT(method, ME_LITS);
@@ -758,10 +774,16 @@ PUBLIC void run_vm(VMSTATE vms) {
 	  NOPERMISSION((OBJ) methname);
 	}
 
+	vm_hold = POP();
+	if (vm_hold->length-1 != NUM(AT(method, ME_ARGC))) {
+	  vm_raise(vms, (OBJ) newsym("wrong-argc"), (OBJ) methname);
+	  break;
+	}
+
 	vms->c.vm_ip += 2;
 	push_frame(vms);
 
-	vms->r->vm_env = (VECTOR) POP();
+	vms->r->vm_env = (VECTOR) vm_hold;
 	ATPUT(vms->r->vm_env, 0, AT(method, ME_ENV));
 	vms->r->vm_code = (BVECTOR) AT(method, ME_CODE);
 	vms->r->vm_lits = (VECTOR) AT(method, ME_LITS);
