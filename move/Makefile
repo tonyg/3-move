@@ -19,7 +19,7 @@ DELETE = rm -f
 
 ######################### UNCOMMENT FOR LINUX
 CC = gcc
-CFLAGS = -D_REENTRANT -c -Wall -g -O2
+CFLAGS = -c -Wall -g -O2
 LIBS =
 
 ######################### UNCOMMENT FOR OSF/1 ON ALPHA
