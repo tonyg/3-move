@@ -176,6 +176,8 @@ PRIVATE THREAD real_begin_thread(int oldnumber, OVECTOR closure, VMSTATE vms, in
   thr = allocmem(sizeof(Thread));
   thr->number = oldnumber;
   thr->vms = vms;
+  thr->contextkind = BLOCK_CTXT_NONE;
+  thr->context = NULL;
 
   if (!restarting) {
     VMSTATE parentvms = vms;
@@ -205,6 +207,7 @@ PRIVATE THREAD real_begin_thread(int oldnumber, OVECTOR closure, VMSTATE vms, in
   }
 
   protect((OBJ *) &thr->vms->r);
+  protect(&thr->context);
 
   return thr;
 }
@@ -235,6 +238,7 @@ PUBLIC int run_run_queue(void) {
 	thr->vms->c.vm_locked_count--;
       }
 
+      unprotect(&thr->context);
       unprotect((OBJ *) &thr->vms->r);
 
       freemem(thr->vms);
@@ -409,6 +413,8 @@ PUBLIC void unblock_thread(THREAD thr) {
   if (thr->vms->r->vm_acc == yield_thread)
     thr->vms->r->vm_acc = undefined;
 
+  thr->contextkind = BLOCK_CTXT_NONE;
+
   deq(thr->queue, thr);
   enq(&run_q, thr);
 }
@@ -468,4 +474,27 @@ PUBLIC void load_restartable_threads(void *phandle, FILE *f) {
 
     real_begin_thread(i, NULL, vms, 0);
   }
+}
+
+PUBLIC ThreadStat *get_thread_stats(void) {
+  int i, n;
+  ThreadStat *tab = allocmem(sizeof(ThreadStat) * (num_active + 1));
+
+  tab[0].number = num_active;
+
+  for (i = 0, n = 1; i < TABLE_SIZE; i++) {
+    THREAD t = threadtab[i];
+
+    while (t != NULL) {
+      tab[n].number = t->number;
+      tab[n].owner = t->vms->r->vm_uid;
+      tab[n].sleeping = (t->queue == &sleep_q);
+      tab[n].status = t->contextkind;
+
+      t = t->next;
+      n++;
+    }
+  }
+
+  return tab;
 }
