@@ -1,7 +1,7 @@
 #ifndef Thread_H
 #define Thread_H
 
-#define BLOCK_CTXT_NONE			0	/* dummy definition - not used */
+#define BLOCK_CTXT_NONE			0	/* not blocked - context is invalid */
 #define BLOCK_CTXT_READLINE		1	/* blocked reading a line -
 						   context is vector with:
 						   0	BVECTOR	buffer
@@ -34,6 +34,13 @@ typedef struct Thread {
    if the thread is sleeping due to a call to sleep_thread().
    */
 
+typedef struct ThreadStat {
+  int number;
+  OBJECT owner;
+  int sleeping;		/* 0 -> run_q or block_q, 1-> sleep_q */
+  int status;		/* BLOCK_CTXT_... or time of awakening */
+} ThreadStat;
+
 extern THREAD current_thread;
 
 extern void init_thread(void);
@@ -57,5 +64,7 @@ extern int thread_is_blocked(THREAD thr);
 
 extern void load_restartable_threads(void *phandle, FILE *f);
 extern void save_restartable_threads(void *phandle, FILE *f);
+
+extern ThreadStat *get_thread_stats(void);
 
 #endif
