@@ -244,6 +244,16 @@ PRIVATE void import_cmdline_files(int argc, char *argv[]) {
   gc_dec_safepoints();
 }
 
+PRIVATE void write_pid(void) {
+  FILE *f = fopen("move.pid", "w");
+
+  if (f == NULL)
+    return;
+
+  fprintf(f, "%ld\n", (long) getpid());
+  fclose(f);
+}
+
 PUBLIC int main(int argc, char *argv[]) {
   pthread_t gc_thread, finalizer_thread;
 
@@ -261,6 +271,8 @@ PUBLIC int main(int argc, char *argv[]) {
 
   pthread_mutex_init(&quit_mutex, NULL);
   pthread_cond_init(&quit_signal, NULL);
+
+  write_pid();
 
   init_gc();
   init_object();
