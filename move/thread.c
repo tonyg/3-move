@@ -263,8 +263,7 @@ PUBLIC void run_blocked_queue(void) {
     THREAD next = thr->next_q;
 
     if (thr->contextkind <= time_now) {
-      deq(&sleep_q, thr);
-      enq(&run_q, thr);
+      unblock_thread(thr);
       thr->vms->r->vm_acc = true;	/* for sleepFun primitive. */
     }
 
