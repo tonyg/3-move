@@ -212,20 +212,58 @@ DEFPRIM(indexOfFun) {
   }
 }
 
-DEFPRIM(strSearch) {
+PRIVATE char *strSearchAux(char *v1, int n1, char *v2, int n2) {
+  int i;
+
+  if (n2 == 0)
+    return v1;
+
+  for (i = 0; i < (n1 - n2) + 1; i++)
+    if (!strncmp(&v1[i], v2, n2))
+      return &v1[i];
+
+  return NULL;
+}
+
+PRIVATE char *strSearchAuxCI(char *v1, int n1, char *v2, int n2) {
+  int i;
+
+  if (n2 == 0)
+    return v1;
+
+  for (i = 0; i < (n1 - n2) + 1; i++)
+    if (!strncasecmp(&v1[i], v2, n2))
+      return &v1[i];
+
+  return NULL;
+}
+
+PRIVATE OBJ strSearchBody(VMSTATE vms, VECTOR argvec, int case_matters) {
   OBJ str = ARG(0);
   OBJ pat = ARG(1);
   byte *pos;
 
   TYPEERRIF(!BVECTORP(str) || !BVECTORP(pat));
 
-  pos = memmem(((BVECTOR) str)->vec, str->length,
-	       ((BVECTOR) pat)->vec, pat->length);
+  if (case_matters)
+    pos = strSearchAux(((BVECTOR) str)->vec, str->length,
+		       ((BVECTOR) pat)->vec, pat->length);
+  else
+    pos = strSearchAuxCI(((BVECTOR) str)->vec, str->length,
+			 ((BVECTOR) pat)->vec, pat->length);
 
   if (pos == NULL)
     return false;
   else
     return MKNUM(pos - ((BVECTOR) str)->vec);
+}
+
+DEFPRIM(strSearch) {
+  return strSearchBody(vms, argvec, 1);
+}
+
+DEFPRIM(strSearchCI) {
+  return strSearchBody(vms, argvec, 0);
 }
 
 DEFPRIM(strReplace) {
@@ -414,5 +452,6 @@ PUBLIC void install_PRIM_compound(void) {
   register_prim("all-keys", 0x01010, allKeysFun);
   register_prim("as-sym", 0x01011, asSymFun);
   register_prim("copy-of", 0x01012, copyOfFun);
+  register_prim("substring-search-ci", 0x01013, strSearchCI);
 }
 
