@@ -208,6 +208,29 @@ DEFPRIM(forceKillFun) {
     return false;
 }
 
+DEFPRIM(getThreadStatusFun) {
+  OBJ tnum = ARG(0);
+  ThreadStat ts;
+  time_t timenow = time(NULL);
+
+  TYPEERRIF(!NUMP(tnum));
+
+  if (get_thread_status(NUM(tnum), &ts)) {
+    VECTOR stats = newvector_noinit(4);
+
+    ATPUT(stats, 0, MKNUM(ts.number));
+    ATPUT(stats, 1, (OBJ) ts.owner);
+    ATPUT(stats, 2, ts.sleeping ? true : false);
+    if (ts.sleeping)
+      ATPUT(stats, 3, MKNUM(ts.status - timenow));
+    else
+      ATPUT(stats, 3, MKNUM(ts.status));
+
+    return (OBJ) stats;
+  } else
+    return false;
+}
+
 PUBLIC void install_PRIM_misc(void) {
   srandom(time(NULL));
 
@@ -224,4 +247,5 @@ PUBLIC void install_PRIM_misc(void) {
   register_prim(2, "fork/quota", 0x0300B, forkQuotaFun);
   register_prim(0, "get-thread-table", 0x0300C, getThreadTableFun);
   register_prim(1, "force-kill", 0x0300D, forceKillFun);
+  register_prim(1, "get-thread-status", 0x0300E, getThreadStatusFun);
 }
