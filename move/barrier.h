@@ -15,7 +15,6 @@ extern void barrier_init(struct barrier *barrier, int threshold);
 
 extern void barrier_hit(struct barrier *barrier);
 
-extern int barrier_set_threshold(struct barrier *barrier, int threshold);
 extern void barrier_inc_threshold(struct barrier *barrier);
 extern void barrier_dec_threshold(struct barrier *barrier);
 
