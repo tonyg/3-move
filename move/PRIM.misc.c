@@ -15,7 +15,7 @@
 
 DEFPRIM(randomFun) {
   OBJ n = ARG(0);
-  TYPEERRIF(!NUMP(n));
+  TYPEERRIF(!NUMP(n) || NUM(n) == 0);
   return MKNUM(random() % NUM(n));
 }
 
