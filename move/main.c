@@ -160,6 +160,7 @@ PRIVATE void run_main_loop(void) {
       idle_loops++;
 
     if (idle_loops >= 5) {	/* If we've been idle for a while... */
+      gc();				/* ... garbage collect ... */
       run_finalize_queue();		/* ... clear up destruction of garbage ... */
       block_until_event();		/* ... and wait for something to happen. */
       idle_loops = 0;
