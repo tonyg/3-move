@@ -1,2 +1,2 @@
-move db $*
+./move db $*
 mv move.checkpoint.000 db

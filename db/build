@@ -6,6 +6,11 @@ then
 	cp db db.PREBUILD
 fi
 
+if [ ! -e move ]
+then
+	ln -s ../move/move .
+fi
+
 if [ -e move.pid ]
 then
 	mv move.pid move.pid.tmp
@@ -14,7 +19,7 @@ fi
 for d in `cat order`
 do
 	echo "Adding $d..."
-	go $d >/dev/null
+	./go $d >/dev/null
 	ls -l db
 done
 
