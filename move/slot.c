@@ -16,9 +16,7 @@ PUBLIC OVECTOR addslot(OBJECT obj, OVECTOR namesym, OBJECT owner) {
   ATPUT(s, SL_VALUE, undefined);
   ATPUT(s, SL_OWNER, (OBJ) owner);
 
-  LOCK(obj);
   hashtable_put(obj->attributes, namesym, s);
-  UNLOCK(obj);
 
   return s;
 }
@@ -30,10 +28,8 @@ PUBLIC OVECTOR findslot(OBJECT obj, OVECTOR namesym, OBJECT *foundin) {
   while (1) {
     OBJ objparents;
 
-    LOCK(obj);
     s = hashtable_get(obj->attributes, namesym);
     objparents = obj->parents;
-    UNLOCK(obj);
 
     if (s != NULL) {
       if (foundin != NULL)

@@ -13,18 +13,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#if 0
-DEFPRIM(getInConn) {
-  return (OBJ) vms->r->vm_input;
-}
-#endif
-
-#if 0
-DEFPRIM(getOutConn) {
-  return (OBJ) vms->r->vm_output;
-}
-#endif
-
 DEFPRIM(compileString) {
   OBJ s = ARG(0);
   BVECTOR str = (BVECTOR) s;
@@ -142,29 +130,13 @@ DEFPRIM(setHandlerFun) {
   return true;
 }
 
-#define ISACONN(x)	(OVECTORP(x) && ((OVECTOR) x)->type == T_CONNECTION)
-
-#if 0
-DEFPRIM(setConnectionsFun) {
-  OBJ i = ARG(0);
-  OBJ o = ARG(1);
-
-  TYPEERRIF(!ISACONN(i) || !ISACONN(o));
-
-  if (!PRIVILEGEDP(vms->r->vm_effuid))
-    return false;
-
-  vms->r->vm_input = (OVECTOR) i;
-  vms->r->vm_output = (OVECTOR) o;
-  return true;
-}
-#endif
-
 DEFPRIM(getCurrThreadFun) {
-  THREAD t = find_thread_by_tid(pthread_self());
-  if (t == NULL)
-    return false;
-  return MKNUM(t->number);
+  if (current_thread == NULL) {
+    fprintf(stderr, "current_thread was NULL in getCurrThreadFun!\n");
+    exit(MOVE_EXIT_MEMORY_ODDNESS);
+  }
+
+  return MKNUM(current_thread->number);
 }
 
 DEFPRIM(setThreadQuotaFun) {
@@ -266,7 +238,7 @@ DEFPRIM(shutdownFun) {
   if (!PRIVILEGEDP(vms->r->vm_effuid))
     return false;
 
-  exit(0);
+  exit(MOVE_EXIT_OK);
 }
 
 DEFPRIM(symValFun) {
@@ -279,25 +251,25 @@ DEFPRIM(symValFun) {
 }
 
 PUBLIC void install_PRIM_system(void) {
-  /* register_prim("input-conn", 0x02001, getInConn); */
-  /* register_prim("output-conn", 0x02002, getOutConn); */
-  register_prim("compile", 0x02003, compileString);
-  register_prim("effuid", 0x02004, getEffuid);
-  register_prim("realuid", 0x02005, getRealuid);
-  register_prim("set-effuid", 0x02006, setEffuid);
-  register_prim("set-realuid", 0x02007, setRealuid);
-  register_prim("define-global", 0x02008, defineGlobal);
-  register_prim("type-of", 0x02009, typeOfFun);
-  register_prim("set-exception-handler", 0x0200A, setHandlerFun);
-  /* register_prim("set-connections", 0x0200B, setConnectionsFun); */
-  register_prim("current-thread", 0x0200C, getCurrThreadFun);
-  register_prim("set-thread-quota", 0x0200D, setThreadQuotaFun);
-  register_prim("checkpoint", 0x0200E, checkpointFun);
-  register_prim("call/cc", 0x0200F, callCCFun);
-  register_prim("setuid?", 0x02010, setuidPFun);
-  register_prim("set-setuid", 0x02011, setSetuidFun);
-  register_prim("caller-effuid", 0x02012, callerEffuidFun);
-  register_prim("in-group-of", 0x02013, inGroupOfFun);
-  register_prim("shutdown", 0x02014, shutdownFun);
-  register_prim("symbol-value", 0x02015, symValFun);
+  /* register_prim(0, "input-conn", 0x02001, getInConn); */
+  /* register_prim(0, "output-conn", 0x02002, getOutConn); */
+  register_prim(1, "compile", 0x02003, compileString);
+  register_prim(0, "effuid", 0x02004, getEffuid);
+  register_prim(0, "realuid", 0x02005, getRealuid);
+  register_prim(1, "set-effuid", 0x02006, setEffuid);
+  register_prim(1, "set-realuid", 0x02007, setRealuid);
+  register_prim(2, "define-global", 0x02008, defineGlobal);
+  register_prim(1, "type-of", 0x02009, typeOfFun);
+  register_prim(1, "set-exception-handler", 0x0200A, setHandlerFun);
+  /* register_prim(2, "set-connections", 0x0200B, setConnectionsFun); */
+  register_prim(0, "current-thread", 0x0200C, getCurrThreadFun);
+  register_prim(2, "set-thread-quota", 0x0200D, setThreadQuotaFun);
+  register_prim(0, "checkpoint", 0x0200E, checkpointFun);
+  register_prim(1, "call/cc", 0x0200F, callCCFun);
+  register_prim(1, "setuid?", 0x02010, setuidPFun);
+  register_prim(2, "set-setuid", 0x02011, setSetuidFun);
+  register_prim(0, "caller-effuid", 0x02012, callerEffuidFun);
+  register_prim(2, "in-group-of", 0x02013, inGroupOfFun);
+  register_prim(0, "shutdown", 0x02014, shutdownFun);
+  register_prim(1, "symbol-value", 0x02015, symValFun);
 }

@@ -9,16 +9,22 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+
 #include "global.h"
 #include "object.h"
 #include "scanner.h"
 #include "conn.h"
+#include "vm.h"
+#include "thread.h"
 
 #if 0
 #define DEBUG
 #endif
 
-PRIVATE OVECTOR mkfileconn(int fd, int blocking) {
+PRIVATE INLINE OVECTOR mkfileconn(int fd, int blocking) {
   OVECTOR c = newovector(CO_MAXSLOTINDEX, T_CONNECTION);
 
   if (!blocking)
@@ -35,10 +41,6 @@ PRIVATE OVECTOR mkfileconn(int fd, int blocking) {
 
 PUBLIC OVECTOR newfileconn(int fd) {
   return mkfileconn(fd, 0);
-}
-
-PUBLIC OVECTOR newfileconn_blocking(int fd) {
-  return mkfileconn(fd, 1);
 }
 
 PUBLIC OVECTOR newstringconn(BVECTOR data) {
@@ -62,7 +64,7 @@ PRIVATE int stringconn_getter(OVECTOR conn) {
   int pos = NUM(AT(conn, CO_INFO));
 
   if (conn_closed(conn))
-    return -1;
+    return CONN_RET_ERROR;
 
   if (NUM(AT(conn, CO_UNGETC)) != -1) {
     int u = NUM(AT(conn, CO_UNGETC));
@@ -72,7 +74,7 @@ PRIVATE int stringconn_getter(OVECTOR conn) {
 
   if (pos >= data->_.length) {
     conn_close(conn);
-    return -1;
+    return CONN_RET_ERROR;
   }
 
   ATPUT(conn, CO_INFO, MKNUM(pos+1));
@@ -83,7 +85,7 @@ PRIVATE int fileconn_getter(OVECTOR conn) {
   char buf;
 
   if (conn_closed(conn))
-    return -1;
+    return CONN_RET_ERROR;
 
   if (NUM(AT(conn, CO_UNGETC)) >= 0) {
     int u = NUM(AT(conn, CO_UNGETC));
@@ -94,28 +96,19 @@ PRIVATE int fileconn_getter(OVECTOR conn) {
   while (1) {
     switch (read(NUM(AT(conn, CO_HANDLE)), &buf, 1)) {
       case -1:
-	if (errno == EAGAIN) {
-	  fd_set fds;
-	  int the_fd = NUM(AT(conn, CO_HANDLE));
+	if (errno == EAGAIN)
+	  return CONN_RET_BLOCK;
 
-	  FD_ZERO(&fds);
-	  FD_SET(the_fd, &fds);
-
-	  if (select(NR_OPEN, &fds, NULL, NULL, NULL) >= 0 || errno == EINTR) {
-	    if (FD_ISSET(the_fd, &fds))
-	      continue;	/* try the read again. */
-	  }
-
-	  /* otherwise fall through */
-	}
-
-	/* FALL THROUGH */
+	return CONN_RET_ERROR;
 
       case 0:
 	conn_close(conn);
-	return -1;
+	return CONN_RET_ERROR;
 
       default:	/* Read was successful. */
+	/* This next bit of hackery is to support not only UNIX line-termination conventions,
+	   but also *both* Mac *and* MS-DOS/Windows. Hurrah. */
+
 	if (NUM(AT(conn, CO_UNGETC)) == -2 && buf == '\n') {	/* "eat next nl." */
 	  ATPUT(conn, CO_UNGETC, MKNUM(-1));
 	  continue;	/* read another char. */
@@ -135,26 +128,42 @@ PRIVATE int fileconn_getter(OVECTOR conn) {
 }
 
 PRIVATE int nullconn_getter(void *arg) {
-  return -1;
+  return CONN_RET_ERROR;
 }
 
-#define CONN_GETS_GETC(conn) ((NUM(AT(conn, CO_TYPE)) == CONN_FILE) ? fileconn_getter(conn) : -1)
+#define CONN_GETS_GETC(conn) ((NUM(AT(conn, CO_TYPE)) == CONN_FILE) ? \
+			      fileconn_getter(conn) : \
+			      CONN_RET_ERROR)
 
-PUBLIC char *conn_gets(char *s, int size, OVECTOR conn) {
-  char *org = s;
+PUBLIC int conn_gets(BVECTOR buf, int size, OVECTOR conn) {
+  char *s = buf->vec;
   int c;
 
   if (conn_closed(conn))
-    return NULL;
+    return CONN_RET_ERROR;
 
   if (NUM(AT(conn, CO_TYPE)) != CONN_FILE)
-    return NULL;
+    return CONN_RET_ERROR;
 
   while (size > 1) {
     c = CONN_GETS_GETC(conn);
 
-    if (c == -1)
-      return NULL;
+    switch (c) {
+      case CONN_RET_ERROR:
+	return CONN_RET_ERROR;
+
+      case CONN_RET_BLOCK: {
+	VECTOR args = newvector_noinit(3);
+	ATPUT(args, 0, (OBJ) buf);
+	ATPUT(args, 1, MKNUM(size));
+	ATPUT(args, 2, (OBJ) conn);
+	block_thread(BLOCK_CTXT_READLINE, (OBJ) args);
+	return CONN_RET_BLOCK;
+      }
+
+      default:
+	break;
+    }
 
     if (c == '\r') {
       int c2 = CONN_GETS_GETC(conn);
@@ -172,33 +181,27 @@ PUBLIC char *conn_gets(char *s, int size, OVECTOR conn) {
   }
 
   *s = '\0';
-  return org;
+  return 0;	/* success. */
 }
 
 PUBLIC int conn_write(const char *buf, int size, OVECTOR conn) {
   if (NUM(AT(conn, CO_TYPE)) != CONN_FILE)
-    return -1;
+    return CONN_RET_ERROR;
 
   return write(NUM(AT(conn, CO_HANDLE)), buf, size);
 }
 
 PUBLIC int conn_puts(const char *s, OVECTOR conn) {
   if (NUM(AT(conn, CO_TYPE)) != CONN_FILE)
-    return -1;
+    return CONN_RET_ERROR;
 
   return write(NUM(AT(conn, CO_HANDLE)), s, strlen(s));
 }
 
 PUBLIC void conn_close(OVECTOR conn) {
-#ifdef DEBUG
-  printf("(%d call close %p)\n", pthread_self(), conn);
-#endif
   switch (NUM(AT(conn, CO_TYPE))) {
     case CONN_FILE: {
       int fd = NUM(AT(conn, CO_HANDLE));
-#ifdef DEBUG
-      printf(" closing %d ", fd); fflush(stdout);
-#endif
       if (fd > 2)	/* don't close stdin, stdout, or stderr */
 	close(fd);
       break;
@@ -236,6 +239,51 @@ PUBLIC void fill_scaninst(SCANINST si, OVECTOR conn) {
 
     default:
       fprintf(stderr, "connection %p had funny type %d\n", conn, NUM(AT(conn, CO_TYPE)));
-      exit(3);
+      exit(MOVE_EXIT_MEMORY_ODDNESS);
   }
+}
+
+PUBLIC int conn_resume_readline(VECTOR args) {
+  int retval = conn_gets((BVECTOR) AT(args, 0), NUM(AT(args, 1)), (OVECTOR) AT(args, 2));
+
+  switch (retval) {
+    case CONN_RET_BLOCK:
+      break;
+
+    case CONN_RET_ERROR:
+      unblock_thread(current_thread);
+      current_thread->vms->r->vm_acc = false;
+      break;
+
+    default:
+      unblock_thread(current_thread);
+      current_thread->vms->r->vm_acc = (OBJ) newstring(((BVECTOR) AT(args, 0))->vec);
+      break;
+  }
+
+  return retval;
+}
+
+PUBLIC int conn_resume_accept(OVECTOR server) {
+  int fd;
+  struct sockaddr_in addr;
+  int addrlen;
+
+  fd = NUM(AT(server, CO_HANDLE));
+  fd = accept(fd, (struct sockaddr *) &addr, &addrlen);
+
+  if (fd == -1) {
+    if (errno == EAGAIN) {
+      block_thread(BLOCK_CTXT_ACCEPT, (OBJ) server);
+      return CONN_RET_BLOCK;
+    }
+
+    unblock_thread(current_thread);
+    current_thread->vms->r->vm_acc = false;
+  } else {
+    unblock_thread(current_thread);
+    current_thread->vms->r->vm_acc = (OBJ) newfileconn(fd);
+  }
+
+  return 0;	/* success. */
 }

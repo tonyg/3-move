@@ -5,6 +5,7 @@
 #include "scanner.h"
 #include "conn.h"
 #include "perms.h"
+#include "thread.h"
 #include "PRIM.h"
 
 #include <stdlib.h>
@@ -106,20 +107,25 @@ DEFPRIM(printOn) {
 
 DEFPRIM(readFrom) {
   OBJ conn = ARG(0);
-  char *retval;
-  char buf[1024];
+  BVECTOR buf = newbvector_noinit(1024);	/* a long line! */
+  VECTOR args = newvector_noinit(3);
 
   TYPEERRIF(!OVECTORP(conn) || ((OVECTOR) conn)->type != T_CONNECTION);
 
-  vms->r->vm_acc = conn;	/* so it isn't (potentially) collected. */
-  gc_dec_safepoints();		/* allow GC's while blocked on read. */
-  retval = conn_gets(buf, 1024, (OVECTOR) conn);
-  gc_inc_safepoints();
+  ATPUT(args, 0, (OBJ) buf);
+  ATPUT(args, 1, MKNUM(1024));
+  ATPUT(args, 2, (OBJ) conn);
 
-  if (retval != NULL)
-    return (OBJ) newstring(buf);
-  else
-    return false;
+  switch (conn_resume_readline(args)) {
+    case CONN_RET_BLOCK:
+      return yield_thread;
+
+    case CONN_RET_ERROR:
+      return false;
+
+    default:
+      return vms->r->vm_acc;	/* already set by conn_resume_readline */
+  }
 }
 
 DEFPRIM(closedP) {
@@ -209,14 +215,11 @@ DEFPRIM(listenConnection) {
     return (OBJ) newsym("listen-failed");
   }
 
-  return (OBJ) newfileconn_blocking(sock);
+  return (OBJ) newfileconn(sock);
 }
 
 DEFPRIM(acceptConnection) {
   OVECTOR serv = (OVECTOR) ARG(0);
-  int fd;
-  struct sockaddr_in addr;
-  int addrlen;
 
   TYPEERRIF(!OVECTORP((OBJ) serv) || serv->type != T_CONNECTION);
   TYPEERRIF(conn_closed(serv) || AT(serv, CO_TYPE) != MKNUM(CONN_FILE));
@@ -224,24 +227,23 @@ DEFPRIM(acceptConnection) {
   if (!PRIVILEGEDP(vms->r->vm_effuid))
     return (OBJ) newsym("permission-denied");
 
-  fd = NUM(AT(serv, CO_HANDLE));
-  gc_dec_safepoints();
-  fd = accept(fd, (struct sockaddr *) &addr, &addrlen);
-  gc_inc_safepoints();
+  switch (conn_resume_accept(serv)) {
+    case CONN_RET_BLOCK:
+      return yield_thread;
 
-  if (fd == -1)
-    return false;
-
-  return (OBJ) newfileconn(fd);
+    case CONN_RET_ERROR:
+    default:
+      return vms->r->vm_acc;
+  }
 }
 
 PUBLIC void install_PRIM_io(void) {
-  register_prim("get-print-string", 0x00001, getPrintString);
-  register_prim("print-on", 0x00002, printOn);
-  register_prim("read-from", 0x00003, readFrom);
-  register_prim("closed?", 0x00004, closedP);
-  register_prim("close", 0x00005, closeConnection);
-  register_prim("open", 0x00006, openConnection);
-  register_prim("listen", 0x00007, listenConnection);
-  register_prim("accept-connection", 0x00008, acceptConnection);
+  register_prim(1, "get-print-string", 0x00001, getPrintString);
+  register_prim(2, "print-on", 0x00002, printOn);
+  register_prim(1, "read-from", 0x00003, readFrom);
+  register_prim(1, "closed?", 0x00004, closedP);
+  register_prim(1, "close", 0x00005, closeConnection);
+  register_prim(2, "open", 0x00006, openConnection);
+  register_prim(1, "listen", 0x00007, listenConnection);
+  register_prim(1, "accept-connection", 0x00008, acceptConnection);
 }

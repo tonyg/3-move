@@ -1,9 +1,18 @@
 #ifndef Global_H
 #define Global_H
 
-#include <pthread.h>
+#include <stdlib.h>
+
 #include "config.h"
 #include "recmutex.h"
+
+#define MOVE_EXIT_OK			0	/* move run successfully until told to quit */
+#define MOVE_EXIT_ERROR			1	/* some general fatal error condition */
+#define MOVE_EXIT_INTERRUPTED		2	/* SIGINT and other nasty user interrupts */
+#define MOVE_EXIT_MEMORY_ODDNESS	3	/* some memory bug/wierdness */
+#define MOVE_EXIT_MEMORY_EXHAUSTED	4	/* no memory left for move */
+#define MOVE_EXIT_DBFMT_ERROR		5	/* disk database wierdness */
+#define MOVE_EXIT_PROGRAMMER_FUCKUP	64	/* shouldn't ever happen. */
 
 #define PRIVATE static
 #define PUBLIC

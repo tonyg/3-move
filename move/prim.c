@@ -4,6 +4,7 @@
 #include "object.h"
 #include "gc.h"
 #include "vm.h"
+#include "thread.h"
 #include "prim.h"
 
 #if 0
@@ -14,6 +15,7 @@
 
 typedef struct primrec {
   char *name;
+  int primargc;
   int number;
   prim_fn fn;
   struct primrec *next;
@@ -28,11 +30,12 @@ PUBLIC void init_prim(void) {
     primtab[i] = NULL;
 }
 
-PUBLIC void register_prim(char *name, int number, prim_fn fn) {
+PUBLIC void register_prim(int primargc, char *name, int number, prim_fn fn) {
   int hash = number % PRIMTAB_SIZE;
   primrec *p = allocmem(sizeof(primrec));
 
   p->name = name;
+  p->primargc = primargc;
   p->number = number;
   p->fn = fn;
   p->next = primtab[hash];
@@ -41,8 +44,6 @@ PUBLIC void register_prim(char *name, int number, prim_fn fn) {
 
 PUBLIC void bind_primitives_to_symbols(void) {
   int i;
-
-  gc_inc_safepoints();
 
   for (i = 0; i < PRIMTAB_SIZE; i++) {
     primrec *p = primtab[i];
@@ -59,20 +60,20 @@ PUBLIC void bind_primitives_to_symbols(void) {
       p = p->next;
     }
   }
-
-  gc_dec_safepoints();
 }
 
-PUBLIC prim_fn lookup_prim(int number) {
+PUBLIC prim_fn lookup_prim(int number, int *primargc) {
   int hash = number % PRIMTAB_SIZE;
   primrec *p = primtab[hash];
 
   while (p != NULL) {
     if (p->number == number) {
 #ifdef DEBUG
-      printf("%ld looked up prim %s\n", pthread_self(), p->name);
+      printf("%p looked up prim %s\n", current_thread, p->name);
       fflush(stdout);
 #endif
+      if (primargc != NULL)
+	*primargc = p->primargc;
       return p->fn;
     }
 

@@ -80,13 +80,19 @@ DEFPRIM(killFun) {
 
   TYPEERRIF(!NUMP(tnum));
 
-  if (!PRIVILEGEDP(vms->r->vm_effuid))
-    return false;
-
   t = find_thread_by_number(NUM(tnum));
 
   if (t != NULL) {
+    if (!PRIVILEGEDP(vms->r->vm_effuid) && vms->r->vm_effuid != t->vms->r->vm_uid)
+      return false;
+
+    /* Used to kill threads with: t->vms->c.vm_state = VM_STATE_DYING;
+       Now I do it differently: */
+
+    if (thread_is_blocked(t))
+      unblock_thread(t);
     vm_raise(t->vms, excp, arg);
+
     return true;
   } else
     return false;
@@ -101,11 +107,11 @@ DEFPRIM(sleepFun) {
   if (numseconds > 600 && !PRIVILEGEDP(vms->r->vm_effuid))
     return false;
 
-  gc_dec_safepoints();
-  sleep(numseconds);
-  gc_inc_safepoints();
+  if (numseconds <= 1)
+    return true;		/* not worth waiting. */
 
-  return true;
+  sleep_thread(numseconds);
+  return yield_thread;
 }
 
 DEFPRIM(equalPFun) {
@@ -159,15 +165,15 @@ DEFPRIM(forkQuotaFun) {
 PUBLIC void install_PRIM_misc(void) {
   srandom(time(NULL));
 
-  register_prim("random", 0x03001, randomFun);
-  register_prim("abs", 0x03002, absFun);
-  register_prim("time", 0x03003, timeFun);
-  register_prim("time-string", 0x03004, timeStringFun);
-  register_prim("time-vector", 0x03005, timeVectorFun);
-  register_prim("fork", 0x03006, forkFun);
-  register_prim("kill", 0x03007, killFun);
-  register_prim("sleep", 0x03008, sleepFun);
-  register_prim("equal?", 0x03009, equalPFun);
-  register_prim("as-num", 0x0300A, asNumFun);
-  register_prim("fork/quota", 0x0300B, forkQuotaFun);
+  register_prim(1, "random", 0x03001, randomFun);
+  register_prim(1, "abs", 0x03002, absFun);
+  register_prim(0, "time", 0x03003, timeFun);
+  register_prim(1, "time-string", 0x03004, timeStringFun);
+  register_prim(1, "time-vector", 0x03005, timeVectorFun);
+  register_prim(1, "fork", 0x03006, forkFun);
+  register_prim(3, "kill", 0x03007, killFun);
+  register_prim(1, "sleep", 0x03008, sleepFun);
+  register_prim(2, "equal?", 0x03009, equalPFun);
+  register_prim(1, "as-num", 0x0300A, asNumFun);
+  register_prim(2, "fork/quota", 0x0300B, forkQuotaFun);
 }

@@ -29,7 +29,7 @@ void buf_append(BUFFER buf, char ch) {
 
     if (newbuf == NULL) {
       fprintf(stderr, "buf_append: could not grow buffer\n");
-      exit(1);
+      exit(MOVE_EXIT_MEMORY_ODDNESS);
     }
 
     memcpy(newbuf, buf->buf, buf->buflength);

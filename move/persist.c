@@ -2,14 +2,12 @@
 #include "object.h"
 #include "vm.h"
 #include "prim.h"
-#include "barrier.h"
 #include "gc.h"
 #include "primload.h"
 #include "scanner.h"
 #include "parser.h"
 #include "conn.h"
 #include "persist.h"
-#include "recmutex.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -145,7 +143,7 @@ PUBLIC void save(void *handle, OBJ root) {
       fwrite(&val, sizeof(byte), 1, p->f);
     } else {
       fprintf(stderr, "Invalid TAGGEDP object (%p) in save of DBFMT_BIG_32.\n", root);
-      exit(2);
+      exit(MOVE_EXIT_DBFMT_ERROR);
     }
     
     return;
@@ -199,7 +197,7 @@ PUBLIC void save(void *handle, OBJ root) {
 
       fwrite(&u, sizeof(u32), 1, p->f);
 
-      if (u == T_CONNECTION) {
+      if (oroot->type == T_CONNECTION) {
 	for (i = 0; i < CO_MAXSLOTINDEX; i++)
 	  fputc('N', p->f);
       } else {
@@ -261,7 +259,7 @@ PRIVATE OBJ load_OLDFMT(PDATA p) {
       fread(&n, sizeof(int), 1, p->f);
       if (!find_obj(p, n, &o)) {
 	fprintf(stderr, "error loading database! object not found by number (%d)!\n", n);
-	exit(2);
+	exit(MOVE_EXIT_DBFMT_ERROR);
       }
       return o;
     } 
@@ -343,7 +341,7 @@ PRIVATE OBJ load_OLDFMT(PDATA p) {
 
     default:
       fprintf(stderr, "unknown type-char (%c) in load_OLDFMT()!\n", t);
-      exit(2);
+      exit(MOVE_EXIT_DBFMT_ERROR);
   }
 
   return NULL;
@@ -376,7 +374,7 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
       n = ntohl(n);
       if (!find_obj(p, n, &o)) {
 	fprintf(stderr, "error loading database! object not found by number (%d)!\n", n);
-	exit(2);
+	exit(MOVE_EXIT_DBFMT_ERROR);
       }
       return o;
     } 
@@ -439,8 +437,11 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
 
 	  obj->finalize = u & 1;
 
-	  for (i = 0; i < u_length; i++)
+	  for (i = 0; i < u_length; i++) {
 	    ATPUT(obj, i, load_BIG_32(p));
+	    if (obj->type == T_CONNECTION)
+	      printf("  loaded conn %d = %p\n", i, AT(obj, i));
+	  }
 
 	  return o;
 	}
@@ -460,8 +461,8 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
     }
 
     default:
-      fprintf(stderr, "unknown type-char (%c) in load_BIG_32()!\n", t);
-      exit(2);
+      fprintf(stderr, "unknown type-char (%c (%d)) in load_BIG_32()!\n", t, t);
+      exit(MOVE_EXIT_DBFMT_ERROR);
   }
 
   return NULL;
@@ -476,7 +477,7 @@ PUBLIC OBJ load(void *handle) {
 
     default:
       fprintf(stderr, "Unrecognised database version. Sorry, I can't load that.\n");
-      exit(2);
+      exit(MOVE_EXIT_DBFMT_ERROR);
   }
 
   return NULL;

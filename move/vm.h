@@ -6,7 +6,7 @@
 /************************************************************************/
 /* VM register file							*/
 
-#define NUM_VMREGS	14
+#define NUM_VMREGS	12
 typedef struct VMregs {
   Obj		_;
 
@@ -23,8 +23,6 @@ typedef struct VMregs {
   OBJECT	vm_uid;		/* Real owner of this thread */
   OBJECT	vm_effuid;	/* Effective owner of this code */
   OBJECT	vm_locked;	/* Object this thread holds the lock for, or NULL */
-  OVECTOR	vm_input;	/* Input connection */
-  OVECTOR	vm_output;	/* Output connection */
 } VMregs, *VMREGS;
 
 typedef struct VMregs_C {
@@ -61,10 +59,7 @@ extern VECTOR vector_concat(VECTOR a, VECTOR b);
 
 extern void init_vm_global(void);
 extern void vm_restore_from(FILE *f);
-extern void *vm_gc_thread_main(void *arg);
-extern void make_gc_thread_exit(void);
-extern void gc_inc_safepoints(void);
-extern void gc_dec_safepoints(void);
+extern void vm_poll_gc(void);
 extern void gc_reach_safepoint(void);
 
 extern void init_vm(VMSTATE vms);
@@ -72,7 +67,8 @@ extern void init_vm(VMSTATE vms);
 extern OVECTOR getcont_from(VMSTATE vms);
 extern void apply_closure(VMSTATE vms, OVECTOR closure, VECTOR argvec);
 extern void vm_raise(VMSTATE vms, OBJ exception, OBJ arg);
-extern void run_vm(VMSTATE vms);
+extern int run_vm(VMSTATE vms);
+	/* returns 1 if thread completed, 0 for end-of-timeslice */
 extern void push_frame(VMSTATE vms);
 
 #endif

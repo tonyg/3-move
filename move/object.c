@@ -5,7 +5,6 @@
 
 #include "global.h"
 #include "object.h"
-#include "barrier.h"
 #include "gc.h"
 #include "scanner.h"
 #include "conn.h"
@@ -15,13 +14,11 @@
 
 #define SYMTAB_SIZE	2131	/* prime */
 
-PRIVATE pthread_mutex_t symtab_mutex;
 PUBLIC VECTOR symtab;
 
 PRIVATE Obj zero_vector;
 
 PUBLIC void init_object(void) {
-  pthread_mutex_init(&symtab_mutex, NULL);
   symtab = newvector(SYMTAB_SIZE);
 
   /* protect((OBJ *) &symtab); NOT NECESSARY NOW THAT SYMBOL TABLE IS SPECIALLY SWEPT */
@@ -40,6 +37,7 @@ PUBLIC OBJECT newobject(OBJ parents, OBJECT owner) {
 
   o->methods = newhashtable(19);
   o->attributes = newhashtable(19);		/* Overrides no methods or attributes */
+						/* Gak, that reminds me, hashtabs should grow! */
 
   o->parents = parents;
   o->owner = owner;
@@ -49,10 +47,8 @@ PUBLIC OBJECT newobject(OBJ parents, OBJECT owner) {
   if (o->owner != NULL) {
     VECTOR link;
 
-    LOCK(o->owner);
     CONS(link, (OBJ) o, (OBJ) o->owner->contents);
     o->owner->contents = link;
-    UNLOCK(o->owner);
 
     o->group = o->owner->group;
   } else
@@ -168,15 +164,12 @@ PUBLIC OVECTOR newsym(char *name) {
   unum h = rawhash % SYMTAB_SIZE;
   OVECTOR sym;
 
-  pthread_mutex_lock(&symtab_mutex);
-
   sym = (OVECTOR) AT(symtab, h);
 
   while (sym != NULL) {
     BVECTOR symname = (BVECTOR) AT(sym, SY_NAME);
 
     if (!strncmp(symname->vec, name, symname->_.length)) {
-      pthread_mutex_unlock(&symtab_mutex);
       return sym;
     }
 
@@ -192,6 +185,5 @@ PUBLIC OVECTOR newsym(char *name) {
 
   ATPUT(symtab, h, (OBJ) sym);
 
-  pthread_mutex_unlock(&symtab_mutex);
   return sym;
 }

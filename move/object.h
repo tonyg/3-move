@@ -215,6 +215,7 @@ typedef struct OVector {
 #define true		MKSINGLETON(0)
 #define false		MKSINGLETON(1)
 #define undefined	MKSINGLETON(2)
+#define yield_thread	MKSINGLETON(3)	/* returned to VM to yield this timeslice */
 
 #define KIND_OBJECT	0
 #define KIND_BVECTOR	1

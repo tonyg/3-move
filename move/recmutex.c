@@ -1,55 +1,31 @@
-#include <pthread.h>
-
 #include "global.h"
 #include "config.h"
 #include "recmutex.h"
-
-#if HAVE_NATIVE_RECURSIVE_MUTEXES
-
-PUBLIC int recmutex_init(recmutex_t *mutex) {
-  pthread_mutexattr_t attr;
-
-  pthread_mutexattr_init(&attr);
-  pthread_mutexattr_setkind(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
-
-  return pthread_mutex_init(mutex, &attr);
-}
-
-#else
+#include "object.h"
+#include "vm.h"
+#include "thread.h"
 
 PUBLIC int recmutex_init(recmutex_t *mutex) {
-  pthread_mutex_init(&mutex->lock, NULL);
-  pthread_cond_init(&mutex->waiters, NULL);
   mutex->counter = 0;
-  mutex->owner = pthread_self();
+  mutex->owner_threadnum = current_thread ? current_thread->number : 0;
   return 0;
 }
 
 PUBLIC int recmutex_lock(recmutex_t *mutex) {
-  pthread_t self = pthread_self();
+  int self = current_thread ? current_thread->number : 0;
 
-  pthread_mutex_lock(&mutex->lock);
-
-  if (mutex->counter != 0 && mutex->owner != self)
-    pthread_cond_wait(&mutex->waiters, &mutex->lock);
+  if (mutex->counter != 0 && mutex->owner_threadnum != self)
+    return -1;	/* EAGAIN, more or less */
 
   mutex->counter++;
-  mutex->owner = self;
-
-  pthread_mutex_unlock(&mutex->lock);
+  mutex->owner_threadnum = self;
   return 0;
 }
 
 PUBLIC int recmutex_unlock(recmutex_t *mutex) {
-  pthread_mutex_lock(&mutex->lock);
-
   if (--mutex->counter <= 0) {
     mutex->counter = 0;
-    pthread_cond_signal(&mutex->waiters);
+    mutex->owner_threadnum = 0;
   }
-
-  pthread_mutex_unlock(&mutex->lock);
   return 0;
 }
-
-#endif

@@ -10,6 +10,7 @@
 #include "method.h"
 #include "pair.h"
 #include "hashtable.h"
+#include "thread.h"
 #include "PRIM.h"
 
 #include <stdlib.h>
@@ -211,9 +212,11 @@ DEFPRIM(lockObjFun) {
 
   vms->r->vm_locked = (OBJECT) x;
   vms->c.vm_locked_count++;
-  LOCK((OBJECT) x);
-
-  return true;
+  if (LOCK((OBJECT) x) < 0) {
+    block_thread(BLOCK_CTXT_LOCKING, x);
+    return yield_thread;
+  } else
+    return true;
 }
 
 DEFPRIM(unlockObjFun) {
@@ -458,8 +461,6 @@ DEFPRIM(setSlotFlagsFun) {
   return true;
 }
 
-PRIVATE pthread_mutex_t moving_lock;
-
 PRIVATE VECTOR contents_remove(VECTOR c, OBJECT o) {
   VECTOR prev = NULL;
   VECTOR curr = c;
@@ -492,18 +493,10 @@ DEFPRIM(moveToFun) {
   if (!PRIVILEGEDP(vms->r->vm_effuid))
     return false;
 
-  pthread_mutex_lock(&moving_lock);
-
-  LOCK(obj);
-  if (dest != NULL)
-    LOCK(dest);
-
   oldloc = obj->location;
 
-  if (oldloc != NULL) {
-    LOCK(oldloc);
+  if (oldloc != NULL)
     oldloc->contents = contents_remove(oldloc->contents, obj);
-  }
 
   obj->location = dest;
 
@@ -512,15 +505,6 @@ DEFPRIM(moveToFun) {
     CONS(link, (OBJ) obj, (OBJ) dest->contents);
     dest->contents = link;
   }
-
-  if (oldloc != NULL)
-    UNLOCK(oldloc);
-
-  if (dest != NULL)
-    UNLOCK(dest);
-  UNLOCK(obj);
-
-  pthread_mutex_unlock(&moving_lock);
 
   return true;
 }
@@ -537,10 +521,7 @@ DEFPRIM(contentsFun) {
 
   TYPEERRIF(!OBJECTP(x));
 
-  LOCK((OBJECT) x);
   result = list_to_vector(((OBJECT) x)->contents);
-  UNLOCK((OBJECT) x);
-
   return (OBJ) result;
 }
 
@@ -662,10 +643,7 @@ DEFPRIM(getSlotsFun) {
     NOPERMISSION();
   }
 
-  LOCK(obj);
   result = enumerate_keys(obj->attributes);
-  UNLOCK(obj);
-
   return (OBJ) result;
 }
 
@@ -680,10 +658,7 @@ DEFPRIM(getMethodsFun) {
     NOPERMISSION();
   }
 
-  LOCK(obj);
   result = enumerate_keys(obj->methods);
-  UNLOCK(obj);
-
   return (OBJ) result;
 }
 
@@ -818,12 +793,10 @@ DEFPRIM(stripObjFun) {
     NOPERMISSION();
   }
 
-  LOCK(ox);
   ox->finalize = 0;
   ox->flags = O_OWNER_MASK;
   ox->methods = newhashtable(19);
   ox->attributes = newhashtable(19);
-  UNLOCK(ox);
 
   return x;
 }
@@ -838,9 +811,7 @@ DEFPRIM(stripObjMFun) {
     NOPERMISSION();
   }
 
-  LOCK(ox);
   ox->methods = newhashtable(19);
-  UNLOCK(ox);
 
   return x;
 }
@@ -855,54 +826,51 @@ DEFPRIM(stripObjSFun) {
     NOPERMISSION();
   }
 
-  LOCK(ox);
   ox->attributes = newhashtable(19);
-  UNLOCK(ox);
 
   return x;
 }
 
 PUBLIC void install_PRIM_object(void) {
   setup_ancestor();
-  pthread_mutex_init(&moving_lock, NULL);
 
-  register_prim("clone", 0x04001, cloneFun);
-  register_prim("privileged?", 0x04002, privFun);
-  register_prim("set-privileged", 0x04003, setPrivFun);
-  register_prim("object-flags", 0x04004, getOFlagsFun);
-  register_prim("set-object-flags", 0x04005, setOFlagsFun);
-  register_prim("owner", 0x04006, ownerFun);
-  register_prim("set-owner", 0x04007, setOwnerFun);
-  register_prim("group", 0x04008, groupFun);
-  register_prim("set-group", 0x04009, setGroupFun);
-  register_prim("parents", 0x0400A, parentsFun);
-  register_prim("set-parents", 0x0400B, setParentsFun);
-  register_prim("lock", 0x0400C, lockObjFun);
-  register_prim("unlock", 0x0400D, unlockObjFun);
-  register_prim("slot-ref", 0x0400E, slotRefFun);
-  register_prim("slot-set", 0x0400F, slotSetFun);
-  register_prim("add-slot", 0x04010, addSlotFun);
-  register_prim("slot-owner", 0x04011, slotOwnerFun);
-  register_prim("set-slot-owner", 0x04012, setSlotOwnerFun);
-  register_prim("slot-flags", 0x04013, slotFlagsFun);
-  register_prim("set-slot-flags", 0x04014, setSlotFlagsFun);
-  register_prim("move-to", 0x04015, moveToFun);
-  register_prim("location", 0x04016, locationFun);
-  register_prim("contents", 0x04017, contentsFun);
-  register_prim("add-method", 0x04018, addMethFun);
-  register_prim("method-owner", 0x04019, methOwnerFun);
-  register_prim("set-method-owner", 0x0401A, setMethOwnerFun);
-  register_prim("method-flags", 0x0401B, methFlagsFun);
-  register_prim("set-method-flags", 0x0401C, setMethFlagsFun);
-  register_prim("method-name", 0x0401D, methNameFun);
-  register_prim("slots", 0x0401D, getSlotsFun);
-  register_prim("methods", 0x0401E, getMethodsFun);
-  register_prim("isa", 0x0401F, isaFun);
-  register_prim("has-slot", 0x04020, hasSlotFun);
-  register_prim("has-method", 0x04021, hasMethFun);
-  register_prim("slot-clear?", 0x04022, slotClearPFun);
-  register_prim("method-ref", 0x04023, methRefFun);
-  register_prim("strip-object-clean", 0x04024, stripObjFun);
-  register_prim("strip-object-methods", 0x04025, stripObjMFun);
-  register_prim("strip-object-slots", 0x04026, stripObjSFun);
+  register_prim(1, "clone", 0x04001, cloneFun);
+  register_prim(1, "privileged?", 0x04002, privFun);
+  register_prim(2, "set-privileged", 0x04003, setPrivFun);
+  register_prim(1, "object-flags", 0x04004, getOFlagsFun);
+  register_prim(2, "set-object-flags", 0x04005, setOFlagsFun);
+  register_prim(1, "owner", 0x04006, ownerFun);
+  register_prim(2, "set-owner", 0x04007, setOwnerFun);
+  register_prim(1, "group", 0x04008, groupFun);
+  register_prim(2, "set-group", 0x04009, setGroupFun);
+  register_prim(1, "parents", 0x0400A, parentsFun);
+  register_prim(2, "set-parents", 0x0400B, setParentsFun);
+  register_prim(1, "lock", 0x0400C, lockObjFun);
+  register_prim(1, "unlock", 0x0400D, unlockObjFun);
+  register_prim(2, "slot-ref", 0x0400E, slotRefFun);
+  register_prim(3, "slot-set", 0x0400F, slotSetFun);
+  register_prim(3, "add-slot", 0x04010, addSlotFun);
+  register_prim(2, "slot-owner", 0x04011, slotOwnerFun);
+  register_prim(3, "set-slot-owner", 0x04012, setSlotOwnerFun);
+  register_prim(2, "slot-flags", 0x04013, slotFlagsFun);
+  register_prim(3, "set-slot-flags", 0x04014, setSlotFlagsFun);
+  register_prim(2, "move-to", 0x04015, moveToFun);
+  register_prim(1, "location", 0x04016, locationFun);
+  register_prim(1, "contents", 0x04017, contentsFun);
+  register_prim(3, "add-method", 0x04018, addMethFun);
+  register_prim(1, "method-owner", 0x04019, methOwnerFun);
+  register_prim(2, "set-method-owner", 0x0401A, setMethOwnerFun);
+  register_prim(1, "method-flags", 0x0401B, methFlagsFun);
+  register_prim(2, "set-method-flags", 0x0401C, setMethFlagsFun);
+  register_prim(1, "method-name", 0x0401D, methNameFun);
+  register_prim(1, "slots", 0x0401D, getSlotsFun);
+  register_prim(1, "methods", 0x0401E, getMethodsFun);
+  register_prim(2, "isa", 0x0401F, isaFun);
+  register_prim(2, "has-slot", 0x04020, hasSlotFun);
+  register_prim(2, "has-method", 0x04021, hasMethFun);
+  register_prim(2, "slot-clear?", 0x04022, slotClearPFun);
+  register_prim(2, "method-ref", 0x04023, methRefFun);
+  register_prim(1, "strip-object-clean", 0x04024, stripObjFun);
+  register_prim(1, "strip-object-methods", 0x04025, stripObjMFun);
+  register_prim(1, "strip-object-slots", 0x04026, stripObjSFun);
 }

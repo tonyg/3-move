@@ -8,9 +8,9 @@
 # Select the LIBS definition you want.
 
 TARGET = move
-objects = barrier.o buffer.o conn.o gc.o hashtable.o main.o method.o \
-	object.o parser.o perms.o persist.o prim.o primload.o recmutex.o \
-	scanner.o slot.o thread.o vm.o \
+objects = buffer.o conn.o gc.o hashtable.o main.o method.o \
+	object.o parser.o perms.o persist.o prim.o primload.o \
+	recmutex.o scanner.o slot.o thread.o vm.o \
 	\
 	PRIM.io.o PRIM.compound.o PRIM.system.o PRIM.misc.o PRIM.object.o
 
@@ -20,7 +20,7 @@ DELETE = rm -f
 ######################### UNCOMMENT FOR LINUX
 CC = gcc
 CFLAGS = -D_REENTRANT -c -Wall -g -O2
-LIBS = -lpthread
+LIBS =
 
 ######################### UNCOMMENT FOR OSF/1 ON ALPHA
 ##CC = cc

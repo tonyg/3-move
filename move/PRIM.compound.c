@@ -13,8 +13,6 @@
 
 #define ALLOW_MUTABLE_STRINGS 0
 
-PRIVATE pthread_mutex_t general_ht_lock;
-
 DEFPRIM(eltRef) {
   OBJ x = ARG(0);
   OBJ i = ARG(1);
@@ -27,9 +25,7 @@ DEFPRIM(eltRef) {
   if (OVECTORP(x)) {	/* hashtable. */
     OVECTOR link;
 
-    pthread_mutex_lock(&general_ht_lock);
     link = hashtable_get((OVECTOR) x, (OVECTOR) i);
-    pthread_mutex_unlock(&general_ht_lock);
     if (link == NULL)
       return undefined;
     return AT(link, US_VALUE);
@@ -67,9 +63,7 @@ DEFPRIM(eltSet) {
     ATPUT(link, US_NEXT, NULL);
     ATPUT(link, US_VALUE, v);
 
-    pthread_mutex_lock(&general_ht_lock);
     hashtable_put((OVECTOR) x, (OVECTOR) i, link);
-    pthread_mutex_unlock(&general_ht_lock);
     return v;
   }
 
@@ -396,9 +390,7 @@ DEFPRIM(allKeysFun) {
 
   TYPEERRIF(!(OVECTORP(h) && ht->type == T_HASHTABLE));
 
-  pthread_mutex_lock(&general_ht_lock);
   result = enumerate_keys(ht);
-  pthread_mutex_unlock(&general_ht_lock);
 
   return (OBJ) result;
 }
@@ -432,26 +424,24 @@ DEFPRIM(copyOfFun) {
 }
 
 PUBLIC void install_PRIM_compound(void) {
-  pthread_mutex_init(&general_ht_lock, NULL);
-
-  register_prim("element-ref", 0x01001, eltRef);
-  register_prim("element-set", 0x01002, eltSet);
-  register_prim("make-vector", 0x01003, makeVector);
-  register_prim("make-string", 0x01004, makeString);
-  register_prim("length", 0x01005, lengthFun);
-  register_prim("append", 0x01006, appendFun);
-  register_prim("delete", 0x01007, deleteFun);
-  register_prim("index-of", 0x01008, indexOfFun);
-  register_prim("substring-search", 0x01009, strSearch);
-  register_prim("substring-replace", 0x0100A, strReplace);
-  register_prim("section", 0x0100B, sectionFun);
-  register_prim("strcmp", 0x0100C, strcmpFun);
-  register_prim("toupper", 0x0100D, toupperFun);
-  register_prim("tolower", 0x0100E, tolowerFun);
-  register_prim("make-hashtable", 0x0100F, makeHTFun);
-  register_prim("all-keys", 0x01010, allKeysFun);
-  register_prim("as-sym", 0x01011, asSymFun);
-  register_prim("copy-of", 0x01012, copyOfFun);
-  register_prim("substring-search-ci", 0x01013, strSearchCI);
+  register_prim(2, "element-ref", 0x01001, eltRef);
+  register_prim(3, "element-set", 0x01002, eltSet);
+  register_prim(-1, "make-vector", 0x01003, makeVector);
+  register_prim(-1, "make-string", 0x01004, makeString);
+  register_prim(1, "length", 0x01005, lengthFun);
+  register_prim(2, "append", 0x01006, appendFun);
+  register_prim(3, "delete", 0x01007, deleteFun);
+  register_prim(2, "index-of", 0x01008, indexOfFun);
+  register_prim(2, "substring-search", 0x01009, strSearch);
+  register_prim(3, "substring-replace", 0x0100A, strReplace);
+  register_prim(3, "section", 0x0100B, sectionFun);
+  register_prim(2, "strcmp", 0x0100C, strcmpFun);
+  register_prim(1, "toupper", 0x0100D, toupperFun);
+  register_prim(1, "tolower", 0x0100E, tolowerFun);
+  register_prim(1, "make-hashtable", 0x0100F, makeHTFun);
+  register_prim(1, "all-keys", 0x01010, allKeysFun);
+  register_prim(1, "as-sym", 0x01011, asSymFun);
+  register_prim(1, "copy-of", 0x01012, copyOfFun);
+  register_prim(2, "substring-search-ci", 0x01013, strSearchCI);
 }
 

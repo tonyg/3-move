@@ -3,6 +3,11 @@
 
 #define HAVE_NATIVE_RECURSIVE_MUTEXES	0
 
+/* For the timeslice:
+   500 was too jerky.
+   */
+#define VM_TIMESLICE_TICKS		2000	/* reasonable? who knows. */
+
 /* These numbers need to be measured to see if they are useful in
    practice. */
 

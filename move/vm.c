@@ -1,7 +1,6 @@
 #include "global.h"
 #include "object.h"
 #include "method.h"
-#include "barrier.h"
 #include "gc.h"
 #include "vm.h"
 #include "bytecode.h"
@@ -22,16 +21,6 @@
 
 /************************************************************************/
 /* Private parts							*/
-
-PRIVATE pthread_mutex_t vm_count_mutex;
-PRIVATE pthread_cond_t vm_count_signal;
-PRIVATE int vm_count;
-
-PRIVATE int gc_thread_should_exit;
-PRIVATE pthread_mutex_t gc_enabler;
-
-PRIVATE struct barrier b_need_gc;
-PRIVATE struct barrier b_gc_complete;
 
 #define VMSTACKLENGTH	1024
 
@@ -155,7 +144,7 @@ PUBLIC INLINE void apply_closure(VMSTATE vms, OVECTOR closure, VECTOR argvec) {
 #define INSTR2(n)	printf(n "%d %d", c[ip+1], c[ip+2]); ip+=3; break
 #define INSTR16(n)	printf(n "%d", (i16) ((int)c[ip+1]*256 + c[ip+2])); ip+=3; break
 PRIVATE void debug_dump_instr(byte *c, int ip) {
-  printf("%ld %04d ", pthread_self(), ip);
+  printf("%p %04d ", current_thread, ip);
 
   switch (c[ip]) {
     case OP_AT:			INSTR1("AT      ");
@@ -177,7 +166,7 @@ PRIVATE void debug_dump_instr(byte *c, int ip) {
     case OP_ENTER_SCOPE:	INSTR1("ENTER   ");
     case OP_LEAVE_SCOPE:	INSTR0("LEAVE   ");
     case OP_MAKE_VECTOR:	INSTR1("MKVECT  ");
-    case OP_FRAME:		INSTR16("FRAME   ");
+    /*    case OP_FRAME:		INSTR16("FRAME   "); */
     case OP_CLOSURE:		INSTR0("CLOSURE ");
     case OP_METHOD_CLOSURE:	INSTR1("METHCLS ");
     case OP_RET:		INSTR0("RETURN  ");
@@ -221,16 +210,6 @@ PUBLIC void init_vm_global(void) {
   checkpoint_filename = NULL;
   synch_bitmap = 0;
   checkpoint_suffix = 0;
-
-  pthread_mutex_init(&vm_count_mutex, NULL);
-  pthread_cond_init(&vm_count_signal, NULL);
-  vm_count = 0;
-
-  gc_thread_should_exit = 0;
-  pthread_mutex_init(&gc_enabler, NULL);
-
-  barrier_init(&b_need_gc, 0);
-  barrier_init(&b_gc_complete, 0);
 }
 
 PUBLIC void vm_restore_from(FILE *f) {
@@ -264,62 +243,20 @@ PRIVATE void checkpoint_now(void) {
   }
 }
 
-PUBLIC void *vm_gc_thread_main(void *arg) {
-  barrier_inc_threshold(&b_need_gc);
-  barrier_inc_threshold(&b_gc_complete);
+PUBLIC void vm_poll_gc(void) {
+  gc();
+  synch_bitmap &= ~SYNCH_GC;
 
-  while (!gc_thread_should_exit) {
-    pthread_mutex_lock(&vm_count_mutex);
-    while (vm_count <= 0) {
-      pthread_cond_wait(&vm_count_signal, &vm_count_mutex);
-    }
-    pthread_mutex_unlock(&vm_count_mutex);
-
-    barrier_hit(&b_need_gc);
-    pthread_mutex_lock(&gc_enabler);
-
-    gc();
-    synch_bitmap &= ~SYNCH_GC;
-
-    if (synch_bitmap & SYNCH_CHECKPOINT) {
-      printf("checkpointing...\n"); fflush(stdout);
-      checkpoint_now();
-      synch_bitmap &= ~SYNCH_CHECKPOINT;
-    }
-
-    pthread_mutex_unlock(&gc_enabler);
-    barrier_hit(&b_gc_complete);
+  if (synch_bitmap & SYNCH_CHECKPOINT) {
+    printf("checkpointing...\n"); fflush(stdout);
+    checkpoint_now();
+    synch_bitmap &= ~SYNCH_CHECKPOINT;
   }
-
-  return NULL;
-}
-
-PUBLIC void make_gc_thread_exit(void) {
-  gc_thread_should_exit = 1;
-}
-
-PUBLIC void gc_inc_safepoints(void) {
-  pthread_mutex_lock(&vm_count_mutex);
-  barrier_inc_threshold(&b_need_gc);
-  barrier_inc_threshold(&b_gc_complete);
-  vm_count++;
-  pthread_cond_broadcast(&vm_count_signal);
-  pthread_mutex_unlock(&vm_count_mutex);
-}
-
-PUBLIC void gc_dec_safepoints(void) {
-  pthread_mutex_lock(&vm_count_mutex);
-  vm_count--;
-  barrier_dec_threshold(&b_need_gc);
-  barrier_dec_threshold(&b_gc_complete);
-  pthread_mutex_unlock(&vm_count_mutex);
 }
 
 PUBLIC INLINE void gc_reach_safepoint(void) {
-  if (need_gc() || (synch_bitmap & (SYNCH_GC | SYNCH_CHECKPOINT))) {
-    barrier_hit(&b_need_gc);
-    barrier_hit(&b_gc_complete);
-  }
+  if (need_gc() || (synch_bitmap & (SYNCH_GC | SYNCH_CHECKPOINT)))
+    vm_poll_gc();
 }
 
 PUBLIC void init_vm(VMSTATE vms) {
@@ -336,8 +273,6 @@ PUBLIC void init_vm(VMSTATE vms) {
   vms->r->vm_uid = NULL;
   vms->r->vm_effuid = NULL;
   vms->r->vm_locked = NULL;
-  vms->r->vm_input = NULL;
-  vms->r->vm_output = NULL;
   vms->c.vm_state = VM_DEFAULT_CPU_QUOTA;
   vms->c.vm_locked_count = 0;
 }
@@ -348,7 +283,9 @@ PUBLIC void vm_raise(VMSTATE vms, OBJ exception, OBJ arg) {
 
     push_frame(vms);
 
-    printf("%ld raising %s\n", pthread_self(), ((BVECTOR) AT((OVECTOR) exception, SY_NAME))->vec);
+#ifdef DEBUG
+    printf("%p raising %s\n", current_thread, ((BVECTOR) AT((OVECTOR) exception, SY_NAME))->vec);
+#endif
 
     ATPUT(argvec, 0, NULL);
     ATPUT(argvec, 1, exception);
@@ -423,14 +360,21 @@ PUBLIC VECTOR vector_concat(VECTOR a, VECTOR b) {
 
 #define NOPERMISSION(x)	vm_raise(vms, (OBJ) newsym("no-permission"), x); break
 
-PUBLIC void run_vm(VMSTATE vms) {
+PUBLIC int run_vm(VMSTATE vms) {
   OBJ vm_hold;	/* Holding register. NOT SEEN BY GC */
+  int ticks_left = VM_TIMESLICE_TICKS;
 
-  gc_inc_safepoints();
-
-  while (vms->c.vm_state != VM_STATE_DYING) {
-    if (vms->c.vm_state > 0)
+  while (vms->c.vm_state != VM_STATE_DYING && ticks_left-- && vms->r->vm_acc != yield_thread) {
+    if (vms->c.vm_state > 0) {
       vms->c.vm_state--;
+      if (vms->c.vm_state == 0) {
+	/* Quota expired. Warn. */
+	vms->c.vm_state = VM_DEFAULT_CPU_QUOTA;
+	vm_raise(vms, (OBJ) newsym("quota-expired"), NULL);
+	/* Make sure we don't recurse :-) */
+	vms->r->vm_trap_closure = NULL;
+      }
+    }
 
     gc_reach_safepoint();
 
@@ -640,17 +584,6 @@ PUBLIC void run_vm(VMSTATE vms) {
 	break;
       }
 
-      case OP_FRAME:
-	fprintf(stderr, "A DISUSED INSTRUCTION, OP_FRAME, WAS INVOKED! Ouch!\n");
-	exit(3);
-#if 0
-	vm_hold = (OBJ) newovector(FR_MAXSLOTINDEX, T_FRAME);
-	fillframe(vms, (OVECTOR) vm_hold, vms->c.vm_ip + 3 + CODE16AT(vms->c.vm_ip+1));
-	vms->r->vm_frame = (OVECTOR) vm_hold;
-	vms->c.vm_ip += 3;
-	break;
-#endif
-
       case OP_CLOSURE:
 	vms->r->vm_acc = make_closure_from((OVECTOR) vms->r->vm_acc,
 					   vms->r->vm_self,
@@ -695,8 +628,8 @@ PUBLIC void run_vm(VMSTATE vms) {
 	    break;
 	}
 
-	gc_dec_safepoints();
-	return;
+	vms->c.vm_state = VM_STATE_DYING;
+	return 1;	/* finished, nothing more to run! */
 	
       case OP_CALL: {
 	OVECTOR methname = (OVECTOR) AT(vms->r->vm_lits, CODEAT(vms->c.vm_ip + 1));
@@ -878,11 +811,11 @@ PUBLIC void run_vm(VMSTATE vms) {
 	fprintf(stderr, "Unknown bytecode reached (%d == 0x%x).\n",
 		CODEAT(vms->c.vm_ip),
 		CODEAT(vms->c.vm_ip));
-	exit(1);
+	exit(MOVE_EXIT_PROGRAMMER_FUCKUP);
     }
   }
 
-  gc_dec_safepoints();
+  return vms->c.vm_state == VM_STATE_DYING;
 }
 
 PUBLIC OVECTOR getcont_from(VMSTATE vms) {

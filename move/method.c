@@ -37,9 +37,7 @@ PUBLIC void addmethod(OBJECT obj, OVECTOR namesym, OBJECT owner, OVECTOR templat
   ATPUT(s, ME_ENV, (OBJ) AT(template, ME_ENV));
   ATPUT(s, ME_ARGC, (OBJ) AT(template, ME_ARGC));
 
-  LOCK(obj);
   hashtable_put(obj->methods, namesym, s);
-  UNLOCK(obj);
 }
 
 PUBLIC OVECTOR findmethod(OBJECT obj, OVECTOR namesym) {
@@ -49,10 +47,8 @@ PUBLIC OVECTOR findmethod(OBJECT obj, OVECTOR namesym) {
   while (1) {
     OBJ objparents;
 
-    LOCK(obj);
     s = hashtable_get(obj->methods, namesym);
     objparents = obj->parents;
-    UNLOCK(obj);
 
     if (s != NULL)
       return s;

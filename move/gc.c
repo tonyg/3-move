@@ -2,7 +2,6 @@
 #include "object.h"
 #include "pair.h"
 
-#include "barrier.h"
 #include "gc.h"
 #include "config.h"
 
@@ -20,16 +19,6 @@ typedef struct Root {
   OBJ *root;
 } Root;
 
-PRIVATE pthread_mutex_t roots_mutex;	/* Protects protect() and unprotect(),
-					   also the mark phase of gc() */
-
-PUBLIC pthread_mutex_t heap_mutex;	/* Protects getmem(), allocmem() and freemem(),
-					   also gc() */
-
-PRIVATE pthread_mutex_t chain_mutex;	/* Protects access to all_objects and finalizable_chain */
-PRIVATE pthread_cond_t fin_chain_signal;	/* Signals when there's something to
-						   finalize */
-
 PRIVATE int num_roots;
 PRIVATE ROOT roots;			/* Chain of all markable roots */
 PRIVATE OBJ all_objects;		/* Chain of all objects */
@@ -41,11 +30,6 @@ PRIVATE int double_threshold;		/* When heap is this big after a gc, max_heapsize
 PRIVATE int curr_heapsize;		/* Currently allocated bytes of heap */
 
 PUBLIC void init_gc(void) {
-  pthread_mutex_init(&roots_mutex, NULL);
-  pthread_mutex_init(&heap_mutex, NULL);
-  pthread_mutex_init(&chain_mutex, NULL);
-  pthread_cond_init(&fin_chain_signal, NULL);
-
   num_roots = 0;
   roots = NULL;
 
@@ -75,26 +59,23 @@ PUBLIC void protect(OBJ *root) {
   ROOT r = allocmem(sizeof(Root));
 
   if (r == NULL)
-    exit(1);
+    exit(MOVE_EXIT_PROGRAMMER_FUCKUP);
 
-  pthread_mutex_lock(&roots_mutex);
 #ifdef DEBUG
-  printf("%d protecting %p\n", pthread_self(), root);
+  printf("protecting %p\n", root);
 #endif
   r->next = roots;
   r->root = root;
   roots = r;
   num_roots++;
-  pthread_mutex_unlock(&roots_mutex);
 }
 
 PUBLIC void unprotect(OBJ *root) {
   ROOT r;
   ROOT prev = NULL;
 
-  pthread_mutex_lock(&roots_mutex);
 #ifdef DEBUG
-  printf("%d unprotecting %p\n", pthread_self(), root);
+  printf("unprotecting %p\n", root);
 #endif
   r = roots;
 
@@ -106,14 +87,11 @@ PUBLIC void unprotect(OBJ *root) {
 	prev->next = r->next;
       freemem(r);
       num_roots--;
-      pthread_mutex_unlock(&roots_mutex);
       return;
     }
     prev = r;
     r = r->next;
   }
-
-  pthread_mutex_unlock(&roots_mutex);
 }
 
 PRIVATE INLINE int object_length_bytes(OBJ x) {
@@ -137,8 +115,6 @@ PRIVATE INLINE int object_length_bytes(OBJ x) {
 PUBLIC OBJ next_to_finalize(void) {
   OBJ result;
 
-  pthread_mutex_lock(&chain_mutex);
-
   result = finalizable_chain;
   if (result != NULL) {
     finalizable_chain = result->next;
@@ -147,21 +123,15 @@ PUBLIC OBJ next_to_finalize(void) {
     curr_heapsize += object_length_bytes(result);
   }
 
-  pthread_mutex_unlock(&chain_mutex);
-
   return result;
 }
 
 PUBLIC void wait_for_finalize(void) {
-  pthread_mutex_lock(&chain_mutex);
-  pthread_cond_wait(&fin_chain_signal, &chain_mutex);
-  pthread_mutex_unlock(&chain_mutex);
+  return;
 }
 
 PUBLIC void awaken_finalizer(void) {
-  pthread_mutex_lock(&chain_mutex);
-  pthread_cond_broadcast(&fin_chain_signal);
-  pthread_mutex_unlock(&chain_mutex);
+  return;
 }
 
 PRIVATE void mark(OBJ x) {
@@ -221,11 +191,6 @@ PUBLIC void gc(void) {
   ROOT r;
   OBJ x;
 
-  /* Grab every resource related to GC. */
-  pthread_mutex_lock(&chain_mutex);
-  pthread_mutex_lock(&roots_mutex);
-  pthread_mutex_lock(&heap_mutex);
-
 #ifdef DEBUG
   printf("-----GC-----"); fflush(stdout);
 #endif
@@ -234,7 +199,7 @@ PUBLIC void gc(void) {
 
   while (r != NULL) {
 #ifdef DEBUG
-    printf("%d marking %p: %p\n", pthread_self(), r->root, *(r->root));
+    printf("marking %p: %p\n", r->root, *(r->root));
 #endif
     mark(*(r->root));
     r = r->next;
@@ -299,13 +264,6 @@ PUBLIC void gc(void) {
     double_threshold <<= 1;
   }
 
-  if (finalizable_chain != NULL)
-    pthread_cond_broadcast(&fin_chain_signal);
-
-  pthread_mutex_unlock(&heap_mutex);
-  pthread_mutex_unlock(&roots_mutex);
-  pthread_mutex_unlock(&chain_mutex);
-
 #ifdef DEBUG
   printf("GC-ENDS\n");
   fflush(stdout);
@@ -319,23 +277,19 @@ PUBLIC int need_gc(void) {
 PUBLIC OBJ getmem(int size, int kind, int length) {
   OBJ ptr;
 
-  pthread_mutex_lock(&heap_mutex);
   ptr = malloc(size);
-  pthread_mutex_unlock(&heap_mutex);
 
   if (ptr == NULL) {
     fprintf(stderr, "fatal error: malloc returned NULL, size == %d\n", size);
-    exit(1);
+    exit(MOVE_EXIT_MEMORY_EXHAUSTED);
   }
 
-  pthread_mutex_lock(&chain_mutex);
   ptr->next = all_objects;
   ptr->kind = kind;
   ptr->marked = 0;
   ptr->length = length;
   all_objects = ptr;
   curr_heapsize += size;
-  pthread_mutex_unlock(&chain_mutex);
 
   return ptr;
 }
@@ -343,20 +297,16 @@ PUBLIC OBJ getmem(int size, int kind, int length) {
 PUBLIC void *allocmem(int size) {
   void *ptr;
 
-  pthread_mutex_lock(&heap_mutex);
   ptr = malloc(size);
-  pthread_mutex_unlock(&heap_mutex);
 
   if (ptr == NULL && size > 0) {
     fprintf(stderr, "fatal error: malloc returned NULL, size == %d\n", size);
-    exit(1);
+    exit(MOVE_EXIT_MEMORY_EXHAUSTED);
   }
 
   return ptr;
 }
 
 PUBLIC void freemem(void *mem) {
-  pthread_mutex_lock(&heap_mutex);
   free(mem);
-  pthread_mutex_unlock(&heap_mutex);
 }
