@@ -5,6 +5,7 @@ extern OVECTOR newhashtable(int len);
 
 extern OVECTOR hashtable_get(OVECTOR table, OVECTOR keysym);
 extern void hashtable_put(OVECTOR table, OVECTOR keysym, OVECTOR value);
+extern void hashtable_remove(OVECTOR table, OVECTOR keysym);
 extern VECTOR enumerate_keys(OVECTOR table);
 
 #endif

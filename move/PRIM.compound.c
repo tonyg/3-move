@@ -306,6 +306,9 @@ DEFPRIM(sectionFun) {
   index = NUM(i);
   length = NUM(l);
 
+  if (length == -1)
+    length = x->length - index;
+
   if (index < 0 || length < 0 || (index + length) > x->length) {
     vm_raise(vms, (OBJ) newsym("range-error"), (OBJ) argvec);
     return undefined;

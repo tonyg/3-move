@@ -56,3 +56,7 @@ PUBLIC OVECTOR findslot(OBJECT obj, OVECTOR namesym, OBJECT *foundin) {
 
   return NULL;
 }
+
+PUBLIC void delslot(OBJECT obj, OVECTOR namesym) {
+  hashtable_remove(obj->attributes, namesym);
+}
