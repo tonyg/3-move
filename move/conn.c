@@ -2,7 +2,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/param.h>
+#include <sys/stat.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "global.h"
 #include "object.h"
@@ -13,8 +18,11 @@
 #define DEBUG
 #endif
 
-PUBLIC OVECTOR newfileconn(int fd) {
+PRIVATE OVECTOR mkfileconn(int fd, int blocking) {
   OVECTOR c = newovector(CO_MAXSLOTINDEX, T_CONNECTION);
+
+  if (!blocking)
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
 
   c->finalize = 1;
   ATPUT(c, CO_TYPE, MKNUM(CONN_FILE));
@@ -23,6 +31,14 @@ PUBLIC OVECTOR newfileconn(int fd) {
   ATPUT(c, CO_HANDLE, MKNUM(fd));
 
   return c;
+}
+
+PUBLIC OVECTOR newfileconn(int fd) {
+  return mkfileconn(fd, 0);
+}
+
+PUBLIC OVECTOR newfileconn_blocking(int fd) {
+  return mkfileconn(fd, 1);
 }
 
 PUBLIC OVECTOR newstringconn(BVECTOR data) {
@@ -69,15 +85,50 @@ PRIVATE int fileconn_getter(OVECTOR conn) {
   if (conn_closed(conn))
     return -1;
 
-  if (NUM(AT(conn, CO_UNGETC)) != -1) {
+  if (NUM(AT(conn, CO_UNGETC)) >= 0) {
     int u = NUM(AT(conn, CO_UNGETC));
     ATPUT(conn, CO_UNGETC, MKNUM(-1));
     return u;
   }
 
-  if (read(NUM(AT(conn, CO_HANDLE)), &buf, 1) != 1) {
-    conn_close(conn);
-    return -1;
+  while (1) {
+    switch (read(NUM(AT(conn, CO_HANDLE)), &buf, 1)) {
+      case -1:
+	if (errno == EAGAIN) {
+	  fd_set fds;
+	  int the_fd = NUM(AT(conn, CO_HANDLE));
+
+	  FD_ZERO(&fds);
+	  FD_SET(the_fd, &fds);
+
+	  if (select(NR_OPEN, &fds, NULL, NULL, NULL) >= 0 || errno == EINTR) {
+	    if (FD_ISSET(the_fd, &fds))
+	      continue;	/* try the read again. */
+	  }
+
+	  /* otherwise fall through */
+	}
+
+	/* FALL THROUGH */
+
+      case 0:
+	conn_close(conn);
+	return -1;
+
+      default:	/* Read was successful. */
+	if (NUM(AT(conn, CO_UNGETC)) == -2 && buf == '\n') {	/* "eat next nl." */
+	  ATPUT(conn, CO_UNGETC, MKNUM(-1));
+	  continue;	/* read another char. */
+	}
+
+	if (buf == '\r') {
+	  buf = '\n';
+	  ATPUT(conn, CO_UNGETC, MKNUM(-2));	/* "eat next nl." */
+	}
+
+	break;
+    }
+    break;
   }
 
   return buf;
