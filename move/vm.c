@@ -8,6 +8,8 @@
 #include "slot.h"
 #include "prim.h"
 #include "perms.h"
+#include "persist.h"
+#include "thread.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -17,24 +19,6 @@
 #if 0
 #define DEBUG
 #endif
-
-#define O_CAN_SOMETHING(x,w,f)	(PERMS_CAN(x,(f)&O_WORLD_MASK) || \
-				 ((w) == (x)->owner && PERMS_CAN(x,(f)&O_OWNER_MASK)) || \
-				 (in_group(w, (x)->group) && PERMS_CAN(x,(f)&O_GROUP_MASK)) || \
-				 PRIVILEGEDP(w))
-#define O_CAN_R(x,w)	O_CAN_SOMETHING(x,w,O_ALL_R)
-#define O_CAN_W(x,w)	O_CAN_SOMETHING(x,w,O_ALL_W)
-#define O_CAN_X(x,w)	O_CAN_SOMETHING(x,w,O_ALL_X)
-#define O_CAN_C(x,w)	O_CAN_SOMETHING(x,w,O_ALL_C)
-
-#define MS_CAN_SOMETHING(x,w,f)	((NUM(AT(x, ME_FLAGS))&(f)&O_WORLD_MASK) || \
-				 ((w) == (OBJECT)AT(x, ME_OWNER) && \
-				  (NUM(AT(x, ME_FLAGS))&(f)&O_OWNER_MASK)) || \
-				 PRIVILEGEDP(w))
-#define MS_CAN_R(x,w)	MS_CAN_SOMETHING(x,w,O_ALL_R)
-#define MS_CAN_W(x,w)	MS_CAN_SOMETHING(x,w,O_ALL_W)
-#define MS_CAN_X(x,w)	MS_CAN_SOMETHING(x,w,O_ALL_X)
-#define MS_CAN_C(x,w)	MS_CAN_SOMETHING(x,w,O_ALL_C)
 
 /************************************************************************/
 /* Private parts							*/
@@ -61,7 +45,7 @@ PRIVATE struct barrier b_gc_complete;
 PRIVATE INLINE void push(VMSTATE vms, OBJ o) {
   if (vms->c.vm_top >= VMSTACKLENGTH) {
     vms->c.vm_top = 0;
-    vms->c.vm_state = 0;
+    vms->c.vm_state = VM_STATE_DYING;
   }
 
   ATPUT(vms->r->vm_stack, vms->c.vm_top, o);
@@ -71,7 +55,7 @@ PRIVATE INLINE void push(VMSTATE vms, OBJ o) {
 PRIVATE INLINE OBJ pop(VMSTATE vms) {
   if (vms->c.vm_top <= 0){
     vms->c.vm_top = 1;
-    vms->c.vm_state = 0;
+    vms->c.vm_state = VM_STATE_DYING;
   }
 
   vms->c.vm_top--;
@@ -104,7 +88,7 @@ PRIVATE INLINE void restoreframe(VMSTATE vms, OVECTOR f) {
   vms->r->vm_effuid = (OBJECT) AT(f, FR_EFFUID);
 }
 
-PRIVATE INLINE void apply_closure(VMSTATE vms, OVECTOR closure, VECTOR argvec) {
+PUBLIC INLINE void apply_closure(VMSTATE vms, OVECTOR closure, VECTOR argvec) {
   if (closure == NULL || TAGGEDP(closure)) {
     vm_raise(vms, (OBJ) newsym("invalid-callable"), (OBJ) closure);
   } else if (closure->type == T_PRIM) {
@@ -133,6 +117,16 @@ PRIVATE INLINE void apply_closure(VMSTATE vms, OVECTOR closure, VECTOR argvec) {
     vms->r->vm_method = meth;
     if (NUM(AT(meth, ME_FLAGS)) & O_SETUID)
       vms->r->vm_effuid = (OBJECT) AT(meth, ME_OWNER);
+  } else if (closure->type == T_CONTINUATION) {
+    int i;
+    VECTOR cstk = (VECTOR) AT(closure, CONT_STACK);
+
+    for (i = 0; i < cstk->_.length; i++)
+      ATPUT(vms->r->vm_stack, i, AT(cstk, i));
+    vms->c.vm_top = cstk->_.length;
+
+    restoreframe(vms, (OVECTOR) AT(closure, CONT_FRAME));
+    vms->r->vm_acc = AT(argvec, 1);
   } else {
     vm_raise(vms, (OBJ) newsym("invalid-callable"), (OBJ) closure);
   }
@@ -202,7 +196,15 @@ PRIVATE void debug_dump_instr(byte *c, int ip) {
 /************************************************************************/
 /* Public parts								*/
 
+PUBLIC char *checkpoint_filename;
+PUBLIC u32 synch_bitmap;
+PRIVATE int checkpoint_suffix;
+
 PUBLIC void init_vm_global(void) {
+  checkpoint_filename = NULL;
+  synch_bitmap = 0;
+  checkpoint_suffix = 0;
+
   pthread_mutex_init(&vm_count_mutex, NULL);
   pthread_cond_init(&vm_count_signal, NULL);
   vm_count = 0;
@@ -214,6 +216,37 @@ PUBLIC void init_vm_global(void) {
   barrier_init(&b_gc_complete, 0);
 }
 
+PUBLIC void vm_restore_from(FILE *f) {
+  void *handle = start_load(f);
+
+  symtab = (VECTOR) load(handle);
+  load_restartable_threads(handle, f);
+
+  end_load(handle);
+}
+
+PRIVATE void checkpoint_now(void) {
+  if (checkpoint_filename != NULL) {
+    char buf[80];
+    FILE *f;
+    void *handle;
+
+    sprintf(buf, "%s.%.3d", checkpoint_filename, checkpoint_suffix++);
+    f = fopen(buf, "w");
+
+    if (f == NULL)
+      return;
+
+    handle = start_save(f);
+
+    save(handle, (OBJ) symtab);
+    save_restartable_threads(handle, f);
+
+    end_save(handle);
+    fclose(f);
+  }
+}
+
 PUBLIC void *vm_gc_thread_main(void *arg) {
   barrier_inc_threshold(&b_need_gc);
   barrier_inc_threshold(&b_gc_complete);
@@ -221,19 +254,22 @@ PUBLIC void *vm_gc_thread_main(void *arg) {
   while (!gc_thread_should_exit) {
     pthread_mutex_lock(&vm_count_mutex);
     while (vm_count <= 0) {
-#ifdef DEBUG
-      printf("%d sleeping on vm_count\n", pthread_self());
-#endif
       pthread_cond_wait(&vm_count_signal, &vm_count_mutex);
-#ifdef DEBUG
-      printf("(%d WOKE UP vm_count)\n", pthread_self());
-#endif
     }
     pthread_mutex_unlock(&vm_count_mutex);
 
     barrier_hit(&b_need_gc);
     pthread_mutex_lock(&gc_enabler);
+
     gc();
+    synch_bitmap &= ~SYNCH_GC;
+
+    if (synch_bitmap & SYNCH_CHECKPOINT) {
+      printf("checkpointing...\n"); fflush(stdout);
+      checkpoint_now();
+      synch_bitmap &= ~SYNCH_CHECKPOINT;
+    }
+
     pthread_mutex_unlock(&gc_enabler);
     barrier_hit(&b_gc_complete);
   }
@@ -247,47 +283,26 @@ PUBLIC void make_gc_thread_exit(void) {
 
 PUBLIC void gc_inc_safepoints(void) {
   pthread_mutex_lock(&vm_count_mutex);
-#ifdef DEBUG
-  printf("%d inc ", pthread_self());
-#endif
   barrier_inc_threshold(&b_need_gc);
   barrier_inc_threshold(&b_gc_complete);
   vm_count++;
   pthread_cond_broadcast(&vm_count_signal);
-#ifdef DEBUG
-  printf("done\n");
-#endif
   pthread_mutex_unlock(&vm_count_mutex);
 }
 
 PUBLIC void gc_dec_safepoints(void) {
   pthread_mutex_lock(&vm_count_mutex);
-#ifdef DEBUG
-  printf("%d dec ", pthread_self());
-#endif
   vm_count--;
   barrier_dec_threshold(&b_need_gc);
   barrier_dec_threshold(&b_gc_complete);
-#ifdef DEBUG
-  printf("done\n");
-#endif
   pthread_mutex_unlock(&vm_count_mutex);
 }
 
-PUBLIC void gc_reach_safepoint(void) {
-#ifdef DEBUG
-  printf("%d reach ", pthread_self());
-#endif
-  if (need_gc()) {
-#ifdef DEBUG
-    printf(" yes ");
-#endif
+PUBLIC INLINE void gc_reach_safepoint(void) {
+  if (need_gc() || (synch_bitmap & (SYNCH_GC | SYNCH_CHECKPOINT))) {
     barrier_hit(&b_need_gc);
     barrier_hit(&b_gc_complete);
   }
-#ifdef DEBUG
-  printf("done\n");
-#endif
 }
 
 PUBLIC void init_vm(VMSTATE vms) {
@@ -296,42 +311,49 @@ PUBLIC void init_vm(VMSTATE vms) {
   vms->r->vm_env = NULL;
   vms->r->vm_lits = NULL;
   vms->r->vm_self = NULL;
-  vms->r->vm_stack = NULL;
+  vms->r->vm_stack = newvector(VMSTACKLENGTH);
   vms->r->vm_frame = NULL;
   vms->r->vm_method = NULL;
   vms->c.vm_ip = vms->c.vm_top = 0;
   vms->r->vm_trap_closure = NULL;
   vms->r->vm_uid = NULL;
   vms->r->vm_effuid = NULL;
+  vms->r->vm_locked = NULL;
   vms->r->vm_input = NULL;
   vms->r->vm_output = NULL;
-  vms->c.vm_state = 1;
+  vms->c.vm_state = VM_DEFAULT_CPU_QUOTA;
+  vms->c.vm_locked_count = 0;
 }
 
 PUBLIC void vm_raise(VMSTATE vms, OBJ exception, OBJ arg) {
   if (vms->r->vm_trap_closure != NULL) {
     VECTOR argvec = newvector_noinit(5);
-    OVECTOR vm_state = newovector(FR_MAXSLOTINDEX, T_FRAME);
 
-    fillframe(vms, vm_state, vms->c.vm_ip);
+    push_frame(vms);
 
     ATPUT(argvec, 0, NULL);
     ATPUT(argvec, 1, exception);
     ATPUT(argvec, 2, arg);
-    ATPUT(argvec, 3, (OBJ) vm_state);
+    ATPUT(argvec, 3, (OBJ) getcont_from(vms));
     ATPUT(argvec, 4, vms->r->vm_acc);
 
-    apply_closure(vms, vms->r->vm_trap_closure, argvec);
+    vms->c.vm_top = 0;
     vms->r->vm_frame = NULL;	/* If it ever returns, the thread dies. */
+    apply_closure(vms, vms->r->vm_trap_closure, argvec);
   } else {
-    fprintf(stderr, "excp sym = '%s\n", ((BVECTOR) AT((OVECTOR) exception, SY_NAME))->vec);
+    if (OVECTORP(exception) && ((OVECTOR) exception)->type == T_SYMBOL)
+      fprintf(stderr, "excp sym = '%s\n", ((BVECTOR) AT((OVECTOR) exception, SY_NAME))->vec);
+    if (OVECTORP(arg) && ((OVECTOR) arg)->type == T_SYMBOL)
+      fprintf(stderr, "arg sym = '%s\n", ((BVECTOR) AT((OVECTOR) arg, SY_NAME))->vec);
+    if (BVECTORP(arg))
+      fprintf(stderr, "arg str = %s\n", ((BVECTOR) arg)->vec);
     fprintf(stderr,
 	    "Exception raised, no handler installed -> vm death.\n");
-    vms->c.vm_state = 0;
+    vms->c.vm_state = VM_STATE_DYING;
   }
 }
 
-PRIVATE OBJ make_closure_from(OVECTOR method, OBJECT self, VECTOR env) {
+PRIVATE OBJ make_closure_from(OVECTOR method, OBJECT self, VECTOR env, OBJECT effuid) {
   OVECTOR nmeth = newovector(ME_MAXSLOTINDEX, T_METHOD);
   OVECTOR nclos = newovector(CL_MAXSLOTINDEX, T_CLOSURE);
   int i;
@@ -340,6 +362,7 @@ PRIVATE OBJ make_closure_from(OVECTOR method, OBJECT self, VECTOR env) {
     ATPUT(nmeth, i, AT(method, i));
 
   ATPUT(nmeth, ME_ENV, (OBJ) env);
+  ATPUT(nmeth, ME_OWNER, (OBJ) effuid);
   ATPUT(nclos, CL_METHOD, (OBJ) nmeth);
   ATPUT(nclos, CL_SELF, (OBJ) self);
   return (OBJ) nclos;
@@ -381,42 +404,16 @@ PUBLIC VECTOR vector_concat(VECTOR a, VECTOR b) {
 
 #define NOPERMISSION()	vm_raise(vms, (OBJ) newsym("no-permission"), NULL); break
 
-PUBLIC void run_vm(VMSTATE vms, OBJECT self, OVECTOR method) {
+PUBLIC void run_vm(VMSTATE vms) {
   OBJ vm_hold;	/* Holding register. NOT SEEN BY GC */
 
   gc_inc_safepoints();
 
-  vms->r->vm_acc = NULL;
-  vms->r->vm_code = (BVECTOR) AT(method, ME_CODE);
-  vms->c.vm_ip = 0;
-  vms->r->vm_env = newvector(1);
-  ATPUT(vms->r->vm_env, 0, NULL);
-  vms->r->vm_lits = (VECTOR) AT(method, ME_LITS);
-  vms->r->vm_self = self;
-  vms->r->vm_stack = newvector(VMSTACKLENGTH);
-  vms->c.vm_top = 0;
-  vms->r->vm_frame = NULL;
-  vms->r->vm_method = method;
-  vms->r->vm_uid = (OBJECT) AT(method, ME_OWNER);
-  vms->r->vm_effuid = vms->r->vm_uid;
+  while (vms->c.vm_state != VM_STATE_DYING) {
+    if (vms->c.vm_state > 0)
+      vms->c.vm_state--;
 
-  while (vms->c.vm_state == 1) {
-    if (need_gc()) {
-#ifdef DEBUG
-      printf("thr %d hit need_gc\n", pthread_self()); fflush(stdout);
-#endif
-      barrier_hit(&b_need_gc);
-#ifdef DEBUG
-      printf("thr %d hit gc_complete\n", pthread_self()); fflush(stdout);
-#endif
-      barrier_hit(&b_gc_complete);
-#ifdef DEBUG
-      printf("thr %d left gc fire\n", pthread_self()); fflush(stdout);
-      printf("vms->r == %p, vms->r->vm_code == %p\n",
-	     vms->r,
-	     vms->r ? vms->r->vm_code : NULL);
-#endif
-    }
+    gc_reach_safepoint();
 
 #ifdef DEBUG
     debug_dump_instr( vms->r->vm_code->vec , vms->c.vm_ip );
@@ -523,7 +520,7 @@ PUBLIC void run_vm(VMSTATE vms, OBJECT self, OVECTOR method) {
       }
 
       case OP_MOV_GLOB_A:
-	if (vms->r->vm_effuid != NULL && !PRIVILEGEDP(vms->r->vm_effuid)) {
+	if (!PRIVILEGEDP(vms->r->vm_effuid)) {
 	  NOPERMISSION();
 	}
 	vm_hold = AT(vms->r->vm_lits, CODEAT(vms->c.vm_ip + 1));
@@ -632,7 +629,8 @@ PUBLIC void run_vm(VMSTATE vms, OBJECT self, OVECTOR method) {
       case OP_CLOSURE:
 	vms->r->vm_acc = make_closure_from((OVECTOR) vms->r->vm_acc,
 					   vms->r->vm_self,
-					   vms->r->vm_env);
+					   vms->r->vm_env,
+					   vms->r->vm_effuid);
 	vms->c.vm_ip++;
 	break;
 
@@ -820,8 +818,16 @@ PUBLIC void run_vm(VMSTATE vms, OBJECT self, OVECTOR method) {
 
       NUMOP(OP_MINUS, vms->r->vm_acc = MKNUM(NUM(POP())-NUM(vms->r->vm_acc)));
       NUMOP(OP_STAR, vms->r->vm_acc = MKNUM(NUM(POP())*NUM(vms->r->vm_acc)));
-      NUMOP(OP_SLASH, vms->r->vm_acc = MKNUM(NUM(POP())/NUM(vms->r->vm_acc)));
-      NUMOP(OP_PERCENT, vms->r->vm_acc = MKNUM(NUM(POP())%NUM(vms->r->vm_acc)));
+      NUMOP(OP_SLASH,
+	    if (vms->r->vm_acc == MKNUM(0))
+	      vm_raise(vms, (OBJ) newsym("divide-by-zero"), NULL);
+	    else
+	      vms->r->vm_acc = MKNUM(NUM(POP())/NUM(vms->r->vm_acc)));
+      NUMOP(OP_PERCENT,
+	    if (vms->r->vm_acc == MKNUM(0))
+	      vm_raise(vms, (OBJ) newsym("divide-by-zero"), NULL);
+	    else
+	      vms->r->vm_acc = MKNUM(NUM(POP())%NUM(vms->r->vm_acc)));
 
       default:
 	fprintf(stderr, "Unknown bytecode reached (%d == 0x%x).\n",
@@ -832,4 +838,26 @@ PUBLIC void run_vm(VMSTATE vms, OBJECT self, OVECTOR method) {
   }
 
   gc_dec_safepoints();
+}
+
+PUBLIC OVECTOR getcont_from(VMSTATE vms) {
+  OVECTOR cont;
+  VECTOR cstk;
+  int i;
+
+  cont = newovector_noinit(CONT_MAXSLOTINDEX, T_CONTINUATION);
+  ATPUT(cont, CONT_FRAME, (OBJ) vms->r->vm_frame);
+  cstk = newvector_noinit(vms->c.vm_top);
+  ATPUT(cont, CONT_STACK, (OBJ) cstk);
+
+  for (i = 0; i < vms->c.vm_top; i++)
+    ATPUT(cstk, i, AT(vms->r->vm_stack, i));
+
+  return cont;
+}
+
+PUBLIC void push_frame(VMSTATE vms) {
+  OVECTOR newf = newovector(FR_MAXSLOTINDEX, T_FRAME);
+  fillframe(vms, newf, vms->c.vm_ip);
+  vms->r->vm_frame = newf;
 }

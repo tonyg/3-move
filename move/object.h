@@ -19,6 +19,8 @@ typedef enum OVectorTypes {
   T_FRAME,
   T_VMREGS,
   T_CONNECTION,
+  T_CONTINUATION,
+  T_USERHASHLINK,
 
   MAX_OVECTOR_TYPE
 } OVectorTypes;
@@ -93,6 +95,21 @@ typedef enum ConnectionSlots {
   CO_MAXSLOTINDEX
 } ConnectionSlots;
 
+typedef enum ContinuationSlots {
+  CONT_FRAME = 0,
+  CONT_STACK,
+
+  CONT_MAXSLOTINDEX
+} ContinuationSlots;
+
+typedef enum UserHashLinkSlots {
+  US_NAME = 0,
+  US_NEXT,
+  US_VALUE,
+
+  US_MAXSLOTINDEX
+} UserHashLinkSlots;
+
 typedef struct Obj {
   OBJ next;			/* Next in all-objects-list. */
   u32 kind: 2;			/* 00, 01, 10, 11; kind of object */
@@ -140,6 +157,7 @@ typedef struct OVector {
   OBJ vec[0];		/* Contents */
 } OVector;
 
+#define O_C_FLAG	0x00004000	/* general flag */
 #define O_SETUID	0x00002000	/* method flag */
 #define O_PRIVILEGED	0x00001000	/* object flag */
 #define O_PERMS_MASK	0x00000FFF
@@ -150,22 +168,22 @@ typedef struct OVector {
 #define O_ALL_R		0x00000111
 #define O_ALL_W		0x00000222
 #define O_ALL_X		0x00000444
-#define O_ALL_C		0x00000888
+/* #define O_ALL_C		0x00000888 */
 
 #define O_OWNER_R	0x00000100
 #define O_OWNER_W	0x00000200
 #define O_OWNER_X	0x00000400
-#define O_OWNER_C	0x00000800
+/* #define O_OWNER_C	0x00000800 */
 #define O_GROUP_R	0x00000010
 #define O_GROUP_W	0x00000020
 #define O_GROUP_X	0x00000040
-#define O_GROUP_C	0x00000080
+/* #define O_GROUP_C	0x00000080 */
 #define O_WORLD_R	0x00000001
 #define O_WORLD_W	0x00000002
 #define O_WORLD_X	0x00000004
-#define O_WORLD_C	0x00000008
+/* #define O_WORLD_C	0x00000008 */
 
-#define CONN_NONE	0
+#define CONN_NONE	0		/* this connection is closed */
 #define CONN_FILE	1		/* HANDLE is fd */
 #define CONN_STRING	2		/* HANDLE is contents-bvector */
 
@@ -176,6 +194,7 @@ typedef struct OVector {
 #define NUMP(x)		(TAG(x) == 1)
 #define MKNUM(x)	((OBJ) (((x) << 2) | 1))
 #define NUM(x)		(((i32) (x)) >> 2)
+#define UNUM(x)		(((u32) (x)) >> 2)
 
 #define SINGLETONP(x)	(TAG(x) == 2)
 #define MKSINGLETON(n)	((OBJ) (((n) << 2) | 2))
@@ -200,12 +219,15 @@ typedef struct OVector {
 #define LOCK(o)		(recmutex_lock(&((o)->lock)))
 #define UNLOCK(o)	(recmutex_unlock(&((o)->lock)))
 
+extern VECTOR symtab;	/* for use by checkpoint_now() in vm.c */
+
 extern void init_object(void);
 
 extern OBJECT newobject(OBJ parents, OBJECT owner);
 
 extern VECTOR newvector(int len);
 extern VECTOR newvector_noinit(int len);
+extern VECTOR vector_clone(VECTOR v);
 
 extern BVECTOR newbvector(int len);
 extern BVECTOR newbvector_noinit(int len);

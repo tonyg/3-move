@@ -9,6 +9,26 @@
 #include <string.h>
 #include <dlfcn.h>
 
+#define USE_EXTERNAL_PRIMITIVE_MODULES 0
+
+#if !USE_EXTERNAL_PRIMITIVE_MODULES
+
+extern void install_PRIM_io(void);
+extern void install_PRIM_compound(void);
+extern void install_PRIM_system(void);
+extern void install_PRIM_misc(void);
+extern void install_PRIM_object(void);
+
+PUBLIC void install_primitives(void) {
+  install_PRIM_io();
+  install_PRIM_compound();
+  install_PRIM_system();
+  install_PRIM_misc();
+  install_PRIM_object();
+}
+
+#else
+
 PUBLIC void install_primitives(void) {
   FILE *f = fopen(INDEX_FILE, "r");
   
@@ -34,8 +54,11 @@ PUBLIC void install_primitives(void) {
       continue;
 
     module_booter = dlsym(dl_handle, "installer");
-    module_booter();
+    if (module_booter != NULL)
+      module_booter();
   }
 
   fclose(f);
 }
+
+#endif

@@ -8,6 +8,7 @@
 #include "scanner.h"
 #include "parser.h"
 #include "conn.h"
+#include "thread.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -22,29 +23,26 @@
 
 #include <pthread.h>
 
-#if 1
-#define DPR(args)	printf args ; fflush(stdout)
-#else
-#define DPR(args)
-#endif
-
 PRIVATE pthread_mutex_t boot_mutex;
 PRIVATE pthread_cond_t boot_signal;
+
+PRIVATE pthread_mutex_t quit_mutex;
+PRIVATE pthread_cond_t quit_signal;
 
 typedef struct repl_data {
   OVECTOR input, output;
   VMREGS vmregs;
-  OBJ holder, holder2;
+  OBJ h1, h2;
 } repl_data, *REPL_DATA;
 
-PRIVATE void *repl(void *arg) {
+PRIVATE void *compile_main(void *arg) {
   VECTOR args = (VECTOR) arg;
   REPL_DATA rd = allocmem(sizeof(repl_data));
   VMstate vms;
 
   rd->input = (OVECTOR) AT(args, 0);
   rd->output = (OVECTOR) AT(args, 1);
-  rd->holder = rd->holder2 = NULL;
+  rd->h1 = rd->h2 = NULL;
 
   protect((OBJ *)(&rd->input));
   protect((OBJ *)(&rd->output));
@@ -53,8 +51,8 @@ PRIVATE void *repl(void *arg) {
   pthread_cond_broadcast(&boot_signal);
   pthread_mutex_unlock(&boot_mutex);
 
-  protect(&rd->holder);
-  protect(&rd->holder2);
+  protect(&rd->h1);
+  protect(&rd->h2);
 
   gc_inc_safepoints();
   rd->vmregs = (VMREGS) newvector(NUM_VMREGS);	/* dodgy casting :-) */
@@ -65,18 +63,11 @@ PRIVATE void *repl(void *arg) {
   vms.r->vm_input = rd->input;
   vms.r->vm_output = rd->output;
 
-  {
-    char buf[80];
-
-    sprintf(buf, "%ld --> You are thread %ld.\n", pthread_self(), pthread_self());
-    conn_puts(buf, rd->output);
-  }
-
-  while (vms.c.vm_state == 1) {
+  while (vms.c.vm_state != VM_STATE_DYING) {
     ScanInst si;
-    char buf[256];
+    char buf[16384];
 
-    rd->holder = (OBJ) newbvector(0);
+    rd->h1 = (OBJ) newbvector(0);
 
     while (1) {
       char *result;
@@ -100,54 +91,61 @@ PRIVATE void *repl(void *arg) {
       if (!strcmp(buf, ".\n"))
 	break;
 
-      rd->holder2 = (OBJ) newstring(buf);
-      rd->holder = (OBJ) bvector_concat((BVECTOR) rd->holder, (BVECTOR) rd->holder2);
+      rd->h2 = (OBJ) newstring(buf);
+      rd->h1 = (OBJ) bvector_concat((BVECTOR) rd->h1, (BVECTOR) rd->h2);
       gc_reach_safepoint();
     }
 
     if (conn_closed(rd->input)) {
+      printf("%ld CONN CLOSED\n", pthread_self());
       break;
     }
 
-    rd->holder2 = (OBJ) newstringconn((BVECTOR) rd->holder);
-    fill_scaninst(&si, (OVECTOR) rd->holder2);
+    rd->h2 = (OBJ) newstringconn((BVECTOR) rd->h1);
+    fill_scaninst(&si, (OVECTOR) rd->h2);
 
-    while (!conn_closed((OVECTOR) rd->holder2) && vms.c.vm_state == 1) {
-      rd->holder = (OBJ) parse(&vms, &si);
+    while (!conn_closed((OVECTOR) rd->h2) && vms.c.vm_state != VM_STATE_DYING) {
+      rd->h1 = (OBJ) parse(&vms, &si);
       gc_reach_safepoint();
 
-      if (rd->holder == NULL) {
+      if (rd->h1 == NULL) {
 	sprintf(buf, "%ld -->! the compiler returned NULL.\n", pthread_self());
       } else {
-	gc_dec_safepoints();
-	ATPUT((OVECTOR) rd->holder, ME_OWNER, (OBJ) vms.r->vm_uid);
+	ATPUT((OVECTOR) rd->h1, ME_OWNER, (OBJ) vms.r->vm_uid);
 	vms.r->vm_effuid = vms.r->vm_uid;
-	run_vm(&vms, NULL, (OVECTOR) rd->holder);
+	{
+	  OVECTOR c = newovector_noinit(CL_MAXSLOTINDEX, T_CLOSURE);
+	  ATPUT(c, CL_SELF, NULL);
+	  ATPUT(c, CL_METHOD, rd->h1);
+	  rd->h1 = (OBJ) c;
+	}
+	apply_closure(&vms, (OVECTOR) rd->h1, newvector_noinit(1));
+
+	gc_dec_safepoints();
+	run_vm(&vms);
 	gc_inc_safepoints();
-	
-	rd->holder = (OBJ) newvector(2);
-	ATPUT((VECTOR) rd->holder, 0, NULL);
-	ATPUT((VECTOR) rd->holder, 1, vms.r->vm_acc);
-	rd->holder = lookup_prim(0x00001)(&vms, (VECTOR) rd->holder);
-	rd->holder = (OBJ) bvector_concat((BVECTOR) rd->holder, newbvector(1));
+
+	rd->h1 = (OBJ) newvector(2);
+	ATPUT((VECTOR) rd->h1, 0, NULL);
+	ATPUT((VECTOR) rd->h1, 1, vms.r->vm_acc);
+	rd->h1 = lookup_prim(0x00001)(&vms, (VECTOR) rd->h1);
+	rd->h1 = (OBJ) bvector_concat((BVECTOR) rd->h1, newbvector(1));
       	/* terminates C-string */
+
 	gc_reach_safepoint();
 
-	sprintf(buf, "%ld --> %s\n", pthread_self(), ((BVECTOR) rd->holder)->vec);
+	sprintf(buf, "%ld --> %s\n", pthread_self(), ((BVECTOR) rd->h1)->vec);
       }
 
       conn_puts(buf, rd->output);
     }
   }
 
-  conn_close(rd->input);
-  conn_close(rd->output);
-
   gc_dec_safepoints();
 
   unprotect((OBJ *)(&rd->vmregs));
-  unprotect(&rd->holder2);
-  unprotect(&rd->holder);
+  unprotect(&rd->h2);
+  unprotect(&rd->h1);
   unprotect((OBJ *)(&rd->output));
   unprotect((OBJ *)(&rd->input));
 
@@ -164,57 +162,11 @@ PRIVATE void start_connection(OVECTOR conni, OVECTOR conno) {
 
   pthread_mutex_lock(&boot_mutex);
 
-  pthread_create(&newthr, NULL, repl, (void *) args);
+  pthread_create(&newthr, NULL, compile_main, (void *) args);
   pthread_detach(newthr);
 
   pthread_cond_wait(&boot_signal, &boot_mutex);
   pthread_mutex_unlock(&boot_mutex);
-}
-
-PRIVATE void *listener(void *arg) {
-  int server;
-  struct sockaddr_in addr;
-  int addrlen;
-  int pnum = 7777;
-
-  server = socket(AF_INET, SOCK_STREAM, 0);
-
-  if (server == -1)
-    return NULL;
-
-  while (1) {
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons(pnum);
-
-    if (bind(server, (struct sockaddr *) &addr, sizeof(addr)) == -1) {
-      pnum += 1111;
-      continue;
-    }
-
-    printf("bound %d\n", pnum);
-    break;
-  }
-
-  if (listen(server, 5) == -1)
-    return NULL;
-
-  while (1) {
-    int fd = accept(server, (struct sockaddr *) &addr, &addrlen);
-    OVECTOR conn;
-
-    printf("accepted %d\n", fd);
-
-    if (fd == -1)
-      return NULL;
-
-    gc_inc_safepoints();
-    conn = newfileconn(fd);
-    start_connection(conn, conn);
-    gc_dec_safepoints();
-  }
-
-  return NULL;
 }
 
 PRIVATE int finalizer_quit = 0;
@@ -253,6 +205,16 @@ PRIVATE void siginthandler(int dummy) {
   exit(123);
 }
 
+PRIVATE void import_db(char *filename) {
+  FILE *f = fopen(filename, "r");
+
+  if (f == NULL)
+    return;
+
+  vm_restore_from(f);
+  fclose(f);
+}
+
 PRIVATE void import_cmdline_files(int argc, char *argv[]) {
   int i;
   OVECTOR ci, co;
@@ -261,13 +223,19 @@ PRIVATE void import_cmdline_files(int argc, char *argv[]) {
   co = newfileconn(1);
 
   for (i = 0; i < argc; i++) {
-    int fd = open(argv[i], O_RDONLY);
+    if (!strcmp(argv[i], "-")) {
+      printf("listening on stdin\n");
+      ci = newfileconn(0);
+    } else {
+      int fd = open(argv[i], O_RDONLY);
 
-    if (fd == -1)
-      continue;
+      if (fd == -1)
+	continue;
 
-    printf("importing %s\n", argv[i]);
-    ci = newfileconn(fd);
+      printf("importing %s %d\n", argv[i], fd);
+      ci = newfileconn(fd);
+    }
+
     start_connection(ci, co);
   }
 
@@ -275,42 +243,47 @@ PRIVATE void import_cmdline_files(int argc, char *argv[]) {
 }
 
 PUBLIC int main(int argc, char *argv[]) {
-  pthread_t gc_thread, listener_thread, finalizer_thread;
+  pthread_t gc_thread, finalizer_thread;
 
-  signal(SIGINT, siginthandler);
+  if (argc < 2) {
+    fprintf(stderr,
+	    "Usage: move <dbfilename> [<move-source-code-file> ...]\n");
+    exit(1);
+  }
+
+  signal(SIGINT, siginthandler);	/* %%% This can be made to emergency-flush
+					   the database to disk, later on %%% */
 
   pthread_mutex_init(&boot_mutex, NULL);
   pthread_cond_init(&boot_signal, NULL);
+
+  pthread_mutex_init(&quit_mutex, NULL);
+  pthread_cond_init(&quit_signal, NULL);
 
   init_gc();
   init_object();
   init_prim();
   init_vm_global();
+  init_thread();
 
-  install_primitives();
+  checkpoint_filename = "move.checkpoint";
 
   pthread_create(&gc_thread, NULL, vm_gc_thread_main, NULL);
-  pthread_create(&listener_thread, NULL, listener, NULL);
   pthread_create(&finalizer_thread, NULL, finalizer, NULL);
 
-  import_cmdline_files(argc - 1, argv + 1);
+  import_db(argv[1]);
+  install_primitives();
 
-  {
-    OVECTOR ci, co;
+  import_cmdline_files(argc - 2, argv + 2);
 
-    printf("listening on stdin\n");
-
-    gc_inc_safepoints();
-    ci = newfileconn(0);	/* stdin */
-    co = newfileconn(1);	/* stdout */
-    start_connection(ci, co);
-    gc_dec_safepoints();
-  }
-
-  pthread_join(listener_thread, NULL);
+  pthread_mutex_lock(&quit_mutex);
+  pthread_cond_wait(&quit_signal, &quit_mutex);
+  pthread_mutex_unlock(&quit_mutex);
+  
   finalizer_quit = 1;
   awaken_finalizer();
   make_gc_thread_exit();
+
   pthread_join(gc_thread, NULL);
   pthread_join(finalizer_thread, NULL);
 

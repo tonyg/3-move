@@ -13,29 +13,37 @@
 #include "pair.h"
 #include "hashtable.h"
 
-#define SYMTAB_SIZE	419	/* prime */
+#define SYMTAB_SIZE	2131	/* prime */
 
 PRIVATE pthread_mutex_t symtab_mutex;
-PRIVATE VECTOR symtab;
+PUBLIC VECTOR symtab;
+
+PRIVATE Obj zero_vector;
 
 PUBLIC void init_object(void) {
   pthread_mutex_init(&symtab_mutex, NULL);
   symtab = newvector(SYMTAB_SIZE);
   protect((OBJ *) &symtab);
+
+  zero_vector.next = NULL;
+  zero_vector.kind = KIND_VECTOR;
+  zero_vector.marked = 0;
+  zero_vector.length = 0;
 }
 
 PUBLIC OBJECT newobject(OBJ parents, OBJECT owner) {
   OBJECT o = (OBJECT) getmem(sizeof(Object), KIND_OBJECT, 0);
 
   o->finalize = 0;
-  o->flags = O_OWNER_MASK&~O_ALL_C;
+  o->flags = O_OWNER_MASK;
 
-  o->methods = NULL;
-  o->attributes = NULL;		/* Overrides no methods or attributes */
+  o->methods = newhashtable(19);
+  o->attributes = newhashtable(19);		/* Overrides no methods or attributes */
 
   o->parents = parents;
   o->owner = owner;
   o->location = o->owner;
+  o->contents = NULL;
 
   if (o->owner != NULL) {
     VECTOR link;
@@ -65,9 +73,21 @@ PUBLIC VECTOR newvector(int len) {
 }
 
 PUBLIC VECTOR newvector_noinit(int len) {
-  VECTOR v = (VECTOR) getmem(sizeof(Vector) + len * sizeof(OBJ), KIND_VECTOR, len);
+  if (len > 0) {
+    VECTOR v = (VECTOR) getmem(sizeof(Vector) + len * sizeof(OBJ), KIND_VECTOR, len);
+    return v;
+  } else
+    return (VECTOR) &zero_vector;
+}
 
-  return v;
+PUBLIC VECTOR vector_clone(VECTOR v) {
+  VECTOR result = newvector_noinit(v->_.length);
+  int i;
+
+  for (i = 0; i < v->_.length; i++)
+    ATPUT(result, i, AT(v, i));
+
+  return result;
 }
 
 PUBLIC BVECTOR newbvector_noinit(int len) {

@@ -26,13 +26,15 @@ PUBLIC int recmutex_init(recmutex_t *mutex) {
 }
 
 PUBLIC int recmutex_lock(recmutex_t *mutex) {
+  pthread_t self = pthread_self();
+
   pthread_mutex_lock(&mutex->lock);
 
-  if (mutex->counter != 0 && mutex->owner != pthread_self())
+  if (mutex->counter != 0 && mutex->owner != self)
     pthread_cond_wait(&mutex->waiters, &mutex->lock);
 
   mutex->counter++;
-  mutex->owner = pthread_self();
+  mutex->owner = self;
 
   pthread_mutex_unlock(&mutex->lock);
   return 0;

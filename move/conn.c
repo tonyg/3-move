@@ -71,23 +71,29 @@ PRIVATE int nullconn_getter(void *arg) {
 
 PUBLIC char *conn_gets(char *s, int size, OVECTOR conn) {
   char *org = s;
+  int c;
 
   if (conn_closed(conn))
     return NULL;
 
-  while (size > 1) {
-    int c = (NUM(AT(conn, CO_TYPE)) == CONN_FILE) ? fileconn_getter(conn) : -1;
+  do {
+    c = (NUM(AT(conn, CO_TYPE)) == CONN_FILE) ? fileconn_getter(conn) : -1;
+  } while (c == '\r' || c == '\n');
 
+  while (size > 1) {
     if (c == -1) {
       return NULL;
+    }
+
+    if (c == '\r' || c == '\n') {
+      break;
     }
 
     *s = c;
     s++;
     size--;
 
-    if (c == '\r' || c == '\n')
-      break;
+    c = (NUM(AT(conn, CO_TYPE)) == CONN_FILE) ? fileconn_getter(conn) : -1;
   }
 
   *s = '\0';
@@ -118,7 +124,8 @@ PUBLIC void conn_close(OVECTOR conn) {
 #ifdef DEBUG
       printf(" closing %d ", fd); fflush(stdout);
 #endif
-      close(fd);
+      if (fd > 2)	/* don't close stdin, stdout, or stderr */
+	close(fd);
       break;
     }
 
@@ -133,6 +140,7 @@ PUBLIC void conn_close(OVECTOR conn) {
 
 PUBLIC void fill_scaninst(SCANINST si, OVECTOR conn) {
   si->cache = -1;
+  si->linenum = 0;
   si->yylval = NULL;
 
   switch (NUM(AT(conn, CO_TYPE))) {

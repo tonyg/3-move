@@ -26,6 +26,7 @@ typedef struct ScanInst {
   stream_fn getter;
   void *arg;
   int cache;
+  int linenum;
   OBJ yylval;
 } ScanInst, *SCANINST;
 

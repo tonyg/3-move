@@ -21,12 +21,16 @@ typedef struct ParseInst {
   SCANINST scaninst;
   int need_scan;
   int scan_result;
+  int other_scan_result;
   int was_close_brace;
 } ParseInst, *PARSEINST;
 
 /***************************************************************************/
 
 PRIVATE void stuff_token(PARSEINST p_i, int class) {
+  if (!p_i->need_scan)
+    p_i->other_scan_result = p_i->scan_result;
+
   p_i->scan_result = class;
   p_i->need_scan = 0;
 }
@@ -39,7 +43,11 @@ PRIVATE int check(PARSEINST p_i, int class) {
   }
 
   if (p_i->need_scan) {
-    p_i->scan_result = scan(p_i->scaninst);
+    if (p_i->other_scan_result) {
+      p_i->scan_result = p_i->other_scan_result;
+      p_i->other_scan_result = 0;
+    } else
+      p_i->scan_result = scan(p_i->scaninst);
     p_i->need_scan = 0;
   }
 
@@ -47,8 +55,13 @@ PRIVATE int check(PARSEINST p_i, int class) {
 }
 
 PRIVATE void drop(PARSEINST p_i) {
-  if (p_i->need_scan)
-    p_i->scan_result = scan(p_i->scaninst);
+  if (p_i->need_scan) {
+    if (p_i->other_scan_result) {
+      p_i->scan_result = p_i->other_scan_result;
+      p_i->other_scan_result = 0;
+    } else
+      p_i->scan_result = scan(p_i->scaninst);
+  }
 
   p_i->was_close_brace = (p_i->scan_result == '}');
   p_i->need_scan = 1;
@@ -434,7 +447,7 @@ PRIVATE int applic_parse(CODE code, OVECTOR currid, int lvalue, int isslot) {
       gen(code, OP_ATPUT);
       gen(code, 2);
 
-      CHKERR(']', "Brackets must match in vector-ref or vector-set syntax");
+      CHKERR(']', "Brackets must match in element-ref or element-set syntax");
       DROP();
 
       if (CHECK('=')) {
@@ -445,13 +458,13 @@ PRIVATE int applic_parse(CODE code, OVECTOR currid, int lvalue, int isslot) {
 	gen(code, OP_ATPUT);
 	gen(code, 3);
 	gen(code, OP_MOV_A_GLOB);
-	GEN_LIT(code, newsym("vector-set"));
+	GEN_LIT(code, newsym("element-set"));
 	gen(code, OP_APPLY);
 	JUMP_HERE_FROM(code, retpos);
 	break;
       } else {
 	gen(code, OP_MOV_A_GLOB);
-	GEN_LIT(code, newsym("vector-ref"));
+	GEN_LIT(code, newsym("element-ref"));
 	gen(code, OP_APPLY);
 	JUMP_HERE_FROM(code, retpos);
 	continue;
@@ -844,7 +857,7 @@ PRIVATE OVECTOR compile_template(CODE code, int argc) {
 PRIVATE int expr_parse(CODE code) {
   if (CHECK(K_DEFINE)) {
     OVECTOR name;
-    u16 frame_pos;
+    u16 frame_pos, frame, offset;
 
     DROP();
 
@@ -973,6 +986,13 @@ PRIVATE int expr_parse(CODE code) {
       CHKERR('(', "'define function' requires formal arglist");
       DROP();
 
+      if (code->scope != NULL) {
+	if (!lookup(code, name, &frame, &offset) || frame != 0) {
+	  frame = 0;
+	  offset = add_binding(code, name);
+	}
+      }
+
       add_scope(code);
       argc = parse_id_list(code);
       if (argc == -1)
@@ -990,6 +1010,13 @@ PRIVATE int expr_parse(CODE code) {
     } else if (CHECK(IDENT)) {
       name = (OVECTOR) yylval;
       DROP();
+
+      if (code->scope != NULL) {
+	if (!lookup(code, name, &frame, &offset) || frame != 0) {
+	  frame = 0;
+	  offset = add_binding(code, name);
+	}
+      }
 
       if (CHECK('=')) {
 	DROP();
@@ -1016,13 +1043,6 @@ PRIVATE int expr_parse(CODE code) {
       gen(code, OP_APPLY);
       JUMP_HERE_FROM(code, frame_pos);
     } else {
-      u16 frame, offset;
-
-      if (!lookup(code, name, &frame, &offset) || frame != 0) {
-	frame = 0;
-	offset = add_binding(code, name);
-      }
-
       gen(code, OP_MOV_LOCL_A);
       gen(code, frame);
       gen(code, offset);
@@ -1090,7 +1110,6 @@ PRIVATE int expr_parse(CODE code) {
 	if (!expr_parse(code))
 	  return 0;
       } else {
-	printf("yes"); fflush(stdout);
 	stuff_token(code->parseinst, ';');
 	gen(code, OP_MOV_A_LITL);
 	GEN_LIT(code, undefined);
@@ -1234,6 +1253,7 @@ PUBLIC OVECTOR parse(VMSTATE vms, SCANINST scaninst) {
   p_i.scaninst = scaninst;
   p_i.need_scan = 1;
   p_i.scan_result = 0;
+  p_i.other_scan_result = 0;
   p_i.was_close_brace = 0;
 
   if (CHECK(SCAN_EOF) || !expr_parse(code)) {

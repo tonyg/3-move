@@ -4,6 +4,7 @@
 #include "prim.h"
 #include "scanner.h"
 #include "conn.h"
+#include "perms.h"
 #include "PRIM.h"
 
 #include <stdlib.h>
@@ -59,6 +60,8 @@ PRIVATE BVECTOR getPrintString_body(VMSTATE vms, OBJ x, int depth) {
       case T_FRAME: return newstring("#<frame>");
       case T_VMREGS: return newstring("#<vmregs>");
       case T_CONNECTION: return newstring("#<connection>");
+      case T_CONTINUATION: return newstring("#<continuation>");
+      case T_USERHASHLINK: return newstring("#<hashlink>");
       default: return newstring("#<unknown-ovector-type>");
     }
   }
@@ -101,14 +104,20 @@ DEFPRIM(printOn) {
 
 DEFPRIM(readFrom) {
   OBJ conn = ARG(0);
+  char *retval;
   char buf[1024];
 
   TYPEERRIF(!OVECTORP(conn) || ((OVECTOR) conn)->type != T_CONNECTION);
 
-  if (conn_gets(buf, 1024, (OVECTOR) conn))
+  vms->r->vm_acc = conn;	/* so it isn't (potentially) collected. */
+  gc_dec_safepoints();		/* allow GC's while blocked on read. */
+  retval = conn_gets(buf, 1024, (OVECTOR) conn);
+  gc_inc_safepoints();
+
+  if (retval != NULL)
     return (OBJ) newstring(buf);
   else
-    return NULL;
+    return false;
 }
 
 DEFPRIM(closedP) {
@@ -138,6 +147,9 @@ DEFPRIM(openConnection) {
 
   TYPEERRIF(!BVECTORP(hostname) || !NUMP(port));
 
+  if (!PRIVILEGEDP(vms->r->vm_effuid))
+    return (OBJ) newsym("permission-denied");
+
   sock = socket(AF_INET, SOCK_STREAM, 0);
 
   if (sock == -1)
@@ -161,11 +173,68 @@ DEFPRIM(openConnection) {
   return (OBJ) newfileconn(sock);
 }
 
-PUBLIC void installer(void) {
+DEFPRIM(listenConnection) {
+  OBJ port = ARG(0);
+  struct sockaddr_in addr;
+  int sock;
+
+  TYPEERRIF(!NUMP(port));
+
+  if (!PRIVILEGEDP(vms->r->vm_effuid))
+    return (OBJ) newsym("permission-denied");
+
+  sock = socket(AF_INET, SOCK_STREAM, 0);
+
+  if (sock == -1)
+    return (OBJ) newsym("socket-creation-failed");
+
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  addr.sin_port = htons(NUM(port));
+
+  if (bind(sock, (struct sockaddr *) &addr, sizeof(addr)) == -1) {
+    close(sock);
+    return (OBJ) newsym("bind-failed");
+  }
+
+  if (listen(sock, 5) == -1) {
+    close(sock);
+    return (OBJ) newsym("listen-failed");
+  }
+
+  return (OBJ) newfileconn(sock);
+}
+
+DEFPRIM(acceptConnection) {
+  OVECTOR serv = (OVECTOR) ARG(0);
+  int fd;
+  struct sockaddr_in addr;
+  int addrlen;
+
+  TYPEERRIF(!OVECTORP((OBJ) serv) || serv->type != T_CONNECTION);
+  TYPEERRIF(conn_closed(serv) || AT(serv, CO_TYPE) != MKNUM(CONN_FILE));
+
+  if (!PRIVILEGEDP(vms->r->vm_effuid))
+    return (OBJ) newsym("permission-denied");
+
+  fd = NUM(AT(serv, CO_HANDLE));
+  gc_dec_safepoints();
+  fd = accept(fd, (struct sockaddr *) &addr, &addrlen);
+  gc_inc_safepoints();
+
+  if (fd == -1)
+    return false;
+
+  return (OBJ) newfileconn(fd);
+}
+
+PUBLIC void install_PRIM_io(void) {
   register_prim("get-print-string", 0x00001, getPrintString);
   register_prim("print-on", 0x00002, printOn);
   register_prim("read-from", 0x00003, readFrom);
   register_prim("closed?", 0x00004, closedP);
   register_prim("close", 0x00005, closeConnection);
   register_prim("open", 0x00006, openConnection);
+  register_prim("listen", 0x00007, listenConnection);
+  register_prim("accept-connection", 0x00008, acceptConnection);
 }

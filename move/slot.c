@@ -12,8 +12,8 @@ PUBLIC OVECTOR addslot(OBJECT obj, OVECTOR namesym, OBJECT owner) {
 
   ATPUT(s, SL_NAME, (OBJ) namesym);
   ATPUT(s, SL_NEXT, NULL);
-  ATPUT(s, SL_FLAGS, MKNUM(O_OWNER_MASK&~O_ALL_C));
-  ATPUT(s, SL_VALUE, NULL);
+  ATPUT(s, SL_FLAGS, MKNUM(O_OWNER_MASK));
+  ATPUT(s, SL_VALUE, undefined);
   ATPUT(s, SL_OWNER, (OBJ) owner);
 
   LOCK(obj);
@@ -54,6 +54,8 @@ PUBLIC OVECTOR findslot(OBJECT obj, OVECTOR namesym, OBJECT *foundin) {
       if (s != NULL)
 	return s;
     }
+
+    break;
   }
 
   return NULL;

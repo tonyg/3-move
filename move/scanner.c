@@ -10,11 +10,15 @@
 #include <ctype.h>
 
 PRIVATE int scan_peek(SCANINST si) {
-  if (si->cache == -1)
+  if (si->cache == -1) {
     si->cache = si->getter(si->arg);
+  }
 
   if (si->cache == '\r')
     si->cache = '\n';
+
+  if (si->cache == '\n')
+    si->linenum++;
 
   return si->cache;
 }
@@ -41,27 +45,29 @@ PRIVATE void scan_shift(SCANINST si, BUFFER buf) {
 }
 
 PRIVATE char *compile_string_ext_rep(char *str) {
-	char *src = str;
-	char *dest = str;
+  char *src = str;
+  char *dest = str;
 	
-	while (*src != '\0') {
-		if (*src == '\\') {
-			src++;
-			switch (*src) {
-				case 'r': *dest = '\r'; break;
-				case 'n': *dest = '\n'; break;
-				case 't': *dest = '\t'; break;
-				default: *dest = *src; break;
-			}
-		} else
-			*dest = *src;
-		src++;
-		dest++;
-	}
+  while (*src != '\0') {
+    if (*src == '\\') {
+      src++;
+      switch (*src) {
+	case 'r': *dest = '\r'; break;
+	case 'n': *dest = '\n'; break;
+	case 't': *dest = '\t'; break;
+	case 'b': *dest = '\b'; break;
+	case 'a': *dest = '\a'; break;
+	default: *dest = *src; break;
+      }
+    } else
+      *dest = *src;
+    src++;
+    dest++;
+  }
 
-	*dest = '\0';
+  *dest = '\0';
 
-	return str;
+  return str;
 }
 
 PRIVATE struct {
@@ -174,10 +180,18 @@ PUBLIC int scan(SCANINST scaninst) {
 	    SCAN_DROP();
 	    GO(ST_STRING)
 
-	  case '\'':
+	  case '#':
 	    SCAN_DROP();
 	    quoted = 1;
 	    GO(ST_ID)
+
+	  case '!':
+	    SCAN_DROP();
+	    if (SCAN_PEEK() == '=') {
+	      SCAN_INSERT('!');
+	      GO(ST_ID)
+	    } else
+	      EMIT('!')
 
 	  default:
 	    break;
@@ -266,21 +280,32 @@ PUBLIC int scan(SCANINST scaninst) {
       case ST_STRING:
 	ch = SCAN_PEEK();
 
-	if (ch == '"') {
-	  SCAN_DROP();
-	  while (isspace(ch = SCAN_PEEK()))
+	switch (ch) {
+	  case '\\':
 	    SCAN_DROP();
-	  if (ch == '"') {
-	    SCAN_DROP();
+	    if (SCAN_PEEK() != '"') {
+	      SCAN_INSERT('\\');
+	    } else {
+	      SCAN_SHIFT();
+	    }
 	    GO(ST_STRING)
-	  }
-	  SCAN_INSERT('\0');
-	  yylval = (OBJ) newstring(compile_string_ext_rep(buf->buf));
-	  EMIT(LITERAL)
-	}
 
-	SCAN_SHIFT();
-	GO(ST_STRING)
+	  case '"':
+	    SCAN_DROP();
+	    while (isspace(ch = SCAN_PEEK()))
+	      SCAN_DROP();
+	    if (ch == '"') {
+	      SCAN_DROP();
+	      GO(ST_STRING)
+	    }
+	    SCAN_INSERT('\0');
+	    yylval = (OBJ) newstring(compile_string_ext_rep(buf->buf));
+	    EMIT(LITERAL)
+
+	  default:
+	    SCAN_SHIFT();
+	    GO(ST_STRING)
+	}
 
       default:
 	break;

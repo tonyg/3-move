@@ -36,11 +36,13 @@ PUBLIC void register_prim(char *name, int number, prim_fn fn) {
   p->next = primtab[hash];
   primtab[hash] = p;
 
-  pobj = newovector(PR_MAXSLOTINDEX, T_PRIM);
   pname = newsym(name);
-  ATPUT(pobj, PR_NAME, (OBJ) pname);
-  ATPUT(pobj, PR_NUMBER, MKNUM(number));
-  ATPUT(pname, SY_VALUE, (OBJ) pobj);
+  if (AT(pname, SY_VALUE) == undefined) {
+    pobj = newovector(PR_MAXSLOTINDEX, T_PRIM);
+    ATPUT(pobj, PR_NAME, (OBJ) pname);
+    ATPUT(pobj, PR_NUMBER, MKNUM(number));
+    ATPUT(pname, SY_VALUE, (OBJ) pobj);
+  }
 }
 
 PUBLIC prim_fn lookup_prim(int number) {

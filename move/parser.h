@@ -1,12 +1,7 @@
 #ifndef Parser_H
 #define Parser_H
 
-typedef struct ParseInst {
-  VMSTATE vms;
-  SCANINST scaninst;
-  int need_scan;
-  int scan_result;
-} ParseInst, *PARSEINST;
+extern VECTOR list_to_vector(VECTOR l);
 
 extern OVECTOR parse(VMSTATE vms, SCANINST scaninst);
 

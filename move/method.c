@@ -15,7 +15,7 @@ PUBLIC OVECTOR newcompilertemplate(int argc, byte *code, int codelen, VECTOR lit
 
   ATPUT(s, ME_NAME, (OBJ) newsym("anonymous-method"));
   ATPUT(s, ME_NEXT, NULL);
-  ATPUT(s, ME_FLAGS, MKNUM(O_OWNER_MASK&~O_ALL_C));
+  ATPUT(s, ME_FLAGS, MKNUM(O_OWNER_MASK | O_SETUID));
   ATPUT(s, ME_CODE, (OBJ) b);
   ATPUT(s, ME_OWNER, NULL);
   ATPUT(s, ME_LITS, (OBJ) littab);
@@ -30,7 +30,7 @@ PUBLIC void addmethod(OBJECT obj, OVECTOR namesym, OBJECT owner, OVECTOR templat
 
   ATPUT(s, ME_NAME, (OBJ) namesym);
   ATPUT(s, ME_NEXT, NULL);
-  ATPUT(s, ME_FLAGS, MKNUM(O_OWNER_MASK));
+  ATPUT(s, ME_FLAGS, MKNUM(O_OWNER_MASK | O_SETUID));
   ATPUT(s, ME_CODE, (OBJ) AT(template, ME_CODE));
   ATPUT(s, ME_OWNER, (OBJ) owner);
   ATPUT(s, ME_LITS, (OBJ) AT(template, ME_LITS));
