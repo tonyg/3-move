@@ -86,9 +86,6 @@ DEFPRIM(killFun) {
     if (!PRIVILEGEDP(vms->r->vm_effuid) && vms->r->vm_effuid != t->vms->r->vm_uid)
       return false;
 
-    /* Used to kill threads with: t->vms->c.vm_state = VM_STATE_DYING;
-       Now I do it differently: */
-
     if (thread_is_blocked(t))
       unblock_thread(t);
     vm_raise(t->vms, excp, arg);
@@ -190,6 +187,27 @@ DEFPRIM(getThreadTableFun) {
   return (OBJ) ans;
 }
 
+DEFPRIM(forceKillFun) {
+  OBJ tnum = ARG(0);
+  THREAD t;
+
+  TYPEERRIF(!NUMP(tnum));
+
+  t = find_thread_by_number(NUM(tnum));
+
+  if (t != NULL) {
+    if (!PRIVILEGEDP(vms->r->vm_effuid))
+      return false;
+
+    if (thread_is_blocked(t))
+      unblock_thread(t);
+    t->vms->c.vm_state = VM_STATE_DYING;
+
+    return true;
+  } else
+    return false;
+}
+
 PUBLIC void install_PRIM_misc(void) {
   srandom(time(NULL));
 
@@ -205,4 +223,5 @@ PUBLIC void install_PRIM_misc(void) {
   register_prim(1, "as-num", 0x0300A, asNumFun);
   register_prim(2, "fork/quota", 0x0300B, forkQuotaFun);
   register_prim(0, "get-thread-table", 0x0300C, getThreadTableFun);
+  register_prim(1, "force-kill", 0x0300D, forceKillFun);
 }
