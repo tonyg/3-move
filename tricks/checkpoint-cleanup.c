@@ -50,7 +50,7 @@ static void write_pid(void) {
   fclose(f);
 }
 
-void main(int argc, char **argv) {
+int main(int argc, char **argv) {
   int delay;
   int keepnum;
 
@@ -83,4 +83,6 @@ void main(int argc, char **argv) {
     cleanup(keepnum);
     sleep(delay);
   }
+
+  return 0;
 }
