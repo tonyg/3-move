@@ -7,7 +7,7 @@ set-object-flags(Program, O_NORMAL_FLAGS | O_C_FLAG);
 
 Program:set-name("Generic Program");
 Program:set-description(["A small piece of paper, with technical-looking marks on it.\n"]);
-Program:add-alias("program");
+//Program:add-alias("program");
 
 define (Program) target = null;
 set-slot-flags(Program, #target, O_ALL_R | O_OWNER_MASK);
