@@ -209,7 +209,7 @@ DEFPRIM(listenConnection) {
     return (OBJ) newsym("listen-failed");
   }
 
-  return (OBJ) newfileconn(sock);
+  return (OBJ) newfileconn_blocking(sock);
 }
 
 DEFPRIM(acceptConnection) {
