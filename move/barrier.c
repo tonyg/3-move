@@ -15,7 +15,13 @@ void barrier_init(struct barrier *barrier, int threshold) {
   barrier->sleeping = 0;
 }
 
-static inline void wait_for_wakeup(struct barrier *barrier) {
+#ifdef __GNUC__
+#define INLINE inline
+#else
+#define INLINE
+#endif
+
+static INLINE void wait_for_wakeup(struct barrier *barrier) {
   if (barrier->sleeping == barrier->waiting) {
     barrier->sleeping = barrier->waiting = 0;
 #ifdef DEBUG
