@@ -40,6 +40,16 @@ static void cleanup(int keepnum) {
   free(list);
 }
 
+static void write_pid(void) {	
+  FILE *f = fopen("checkpoint-cleanup.pid", "w");
+
+  if (f == NULL)
+    return;
+
+  fprintf(f, "%ld\n", (long) getpid());
+  fclose(f);
+}
+
 void main(int argc, char **argv) {
   int delay;
   int keepnum;
@@ -66,6 +76,8 @@ void main(int argc, char **argv) {
     fprintf(stderr, "Number of files to keep must be 1 or greater.\n");
     exit(1);
   }
+
+  write_pid();
 
   while (1) {
     cleanup(keepnum);
