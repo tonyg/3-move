@@ -56,11 +56,16 @@ define function reduce(f, st, vec) {
 }
 
 define function find-by-name(vec, name)
-     first-that(function (x) equal?(x.name, name) ||
-			     (length(name) > 0 &&
-			      !slot-clear?(x, #registry-number) &&
-			      as-num(section(name, 1, -1)) == x.registry-number),
-		vec);
+     first-that(function (x) {
+       if (equal?(x.name, name))
+	 return true;
+
+       if (length(name) == 0 || slot-clear?(x, #registry-number))
+	 return false;
+
+       define r = section(name, 1, -1);
+       as-num(section(r, 0, index-of(r, " ") || -1)) == x.registry-number;
+     }, vec);
 
 define function valid(obj) type-of(obj) == #object;
 
@@ -326,7 +331,8 @@ define function make-sentence(vec) {
 
 define function object-named(name) {
   if (length(name) > 0 && equal?(section(name, 0, 1), "#")) {
-    define n = as-num(section(name, 1, -1));
+    define r = section(name, 1, -1);
+    define n = as-num(section(r, 0, index-of(r, " ") || -1));
     if (n) {
       define rego = Registry:at(n);
       if (rego != undefined)
