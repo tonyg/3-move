@@ -169,7 +169,7 @@ PRIVATE void *thread_body(void *args) {
     vms->c.vm_state = ta->quota;
     vms->r->vm_input = parentvms->r->vm_input;
     vms->r->vm_output = parentvms->r->vm_output;
-    vms->r->vm_uid = parentvms->r->vm_uid;
+    vms->r->vm_uid = parentvms->r->vm_effuid;
     vms->r->vm_effuid = parentvms->r->vm_effuid;
     vms->r->vm_trap_closure = parentvms->r->vm_trap_closure;
 
