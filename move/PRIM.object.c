@@ -124,12 +124,11 @@ DEFPRIM(setOwnerFun) {
 
   TYPEERRIF(!OBJECTP(x) || !OBJECTP(o));
 
-  if (vms->r->vm_effuid == ox->owner || PRIVILEGEDP(vms->r->vm_effuid)) {
+  if (PRIVILEGEDP(vms->r->vm_effuid)) {
     ox->owner = (OBJECT) o;
     return true;
-  }
-
-  return false;
+  } else
+    return false;
 }
 
 DEFPRIM(groupFun) {
@@ -379,7 +378,12 @@ DEFPRIM(setSlotOwnerFun) {
     return undefined;
   }
 
+#if 0
   if (vms->r->vm_effuid != (OBJECT) AT(slot, SL_OWNER)) {
+    NOPERMISSION();
+  }
+#endif
+  if (!PRIVILEGEDP(vms->r->vm_effuid)) {
     NOPERMISSION();
   }
 
@@ -591,7 +595,12 @@ DEFPRIM(setMethOwnerFun) {
 
   meth = (OVECTOR) AT(clos, CL_METHOD);
 
+#if 0
   if (vms->r->vm_effuid != (OBJECT) AT(meth, ME_OWNER)) {
+    NOPERMISSION();
+  }
+#endif
+  if (!PRIVILEGEDP(vms->r->vm_effuid)) {
     NOPERMISSION();
   }
 
