@@ -437,10 +437,15 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
 
 	  obj->finalize = u & 1;
 
-	  for (i = 0; i < u_length; i++) {
-	    ATPUT(obj, i, load_BIG_32(p));
-	    if (obj->type == T_CONNECTION)
-	      printf("  loaded conn %d = %p\n", i, AT(obj, i));
+	  if (obj->type == T_CONNECTION) {
+	    for (i = 0; i < u_length; i++) {
+	      ATPUT(obj, i, load_BIG_32(p));
+	      if (AT(obj, i) != NULL)
+		printf("  WARNING: conn[%d] == %p\n", i, AT(obj, i));
+	    }
+	  } else {
+	    for (i = 0; i < u_length; i++)
+	      ATPUT(obj, i, load_BIG_32(p));
 	  }
 
 	  return o;
