@@ -140,13 +140,21 @@ typedef struct Object {
 typedef struct Vector {
   Obj _;
 
+#ifdef __GNUC__
   OBJ vec[0];			/* Contents */
+#else
+  OBJ vec[1];			/* GRR no struct hack allowed */
+#endif
 } Vector;
 
 typedef struct BVector {
   Obj _;
 
+#ifdef __GNUC__
   byte vec[0];			/* Contents */
+#else
+  byte vec[1];
+#endif
 } BVector;
 
 typedef struct OVector {
@@ -155,7 +163,11 @@ typedef struct OVector {
   u32 finalize: 1;
   u32 type: 31;		/* Kind of Opaque Vector - should really be enum OVectorTypes */
 
-  OBJ vec[0];		/* Contents */
+#ifdef __GNUC__
+  OBJ vec[0];			/* Contents */
+#else
+  OBJ vec[1];			/* GRR no struct hack allowed */
+#endif
 } OVector;
 
 #define O_C_FLAG	0x00004000	/* general flag */
@@ -190,12 +202,12 @@ typedef struct OVector {
 
 #define TAG(x)		((word) (x) & 3)
 #define TAGGEDP(x)	(TAG(x) != 0)
-#define DETAG(x)	(((u32) (x)) >> 2)
+#define DETAG(x)	(((unum) (x)) >> 2)
 
 #define NUMP(x)		(TAG(x) == 1)
 #define MKNUM(x)	((OBJ) (((x) << 2) | 1))
-#define NUM(x)		(((i32) (x)) >> 2)
-#define UNUM(x)		(((u32) (x)) >> 2)
+#define NUM(x)		(((inum) (x)) >> 2)
+#define UNUM(x)		(((unum) (x)) >> 2)
 
 #define SINGLETONP(x)	(TAG(x) == 2)
 #define MKSINGLETON(n)	((OBJ) (((n) << 2) | 2))
