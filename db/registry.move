@@ -2,7 +2,11 @@
 set-realuid(Wizard);
 set-effuid(Wizard);
 
-clone-if-undefined(#Registry, Thing);
+if (Registry == undefined)
+  Registry = Thing:clone();
+else
+  strip-object-methods(Registry);
+set-owner(Registry, Wizard);
 set-object-flags(Registry, O_NORMAL_FLAGS);
 
 Registry:set-name("Registry");
@@ -10,7 +14,7 @@ Registry:set-description(["The registry of most user-accessible objects in the s
 
 {
   if (!has-slot(Registry, #next-number))
-    define (Registry) next-number = 1;
+    define (Registry) next-number = 0;
   set-slot-flags(Registry, #next-number, O_OWNER_MASK);
 
   if (!has-slot(Registry, #table-size))
@@ -119,7 +123,8 @@ define method (Registry) @enumerate-verb(b) {
 }
 Registry:add-verb(#reg, #@enumerate-verb, ["@enumerate ", #reg]);
 
-for-each(Registry:register, [Thing, Player, Room, Exit, Note, Program, Registry, Wizard, Guest]);
+Registry:register(Registry);	// Gets #0.
+map(Registry:register, [Thing, Player, Room, Exit, Note, Program, Wizard, Guest]);
 
 checkpoint();
 shutdown();
