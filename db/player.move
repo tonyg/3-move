@@ -375,7 +375,7 @@ define method (Player) @sethome-verb(b) {
     }
 
     if (do-the-move() == true) {
-      player:tell("You set your home to " + loc.name + ".\n");
+      player:tell("You set your home to " + loc:fullname() + ".\n");
       this.home = loc;
       return;
     }
@@ -438,6 +438,8 @@ define method (Player) @build-verb(b) {
       ptell("You named it \"" + oname + "\".\n");
     else
       ptell("You couldn't name it, for some reason.\n");
+    Registry:register(obj);
+    ptell("It was registered as " + obj:fullname() + ".\n");
   } else
     ptell("You didn't create an object.\n");
 }

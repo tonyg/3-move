@@ -102,6 +102,13 @@ define method (Root) set-name(n) {
     false;
 }
 
+define method (Root) fullname() {
+  if (slot-clear?(this, #registry-number))
+    this.name;
+  else
+    this.name + " (#" + get-print-string(this.registry-number) + ")";
+}
+
 Wizard:set-name("Wizard");
 
 move-to(Root, null);

@@ -45,7 +45,7 @@ set-slot-flags(Login, #motd, O_ALL_R);
     define real-GPS = get-print-string;
     get-print-string = function (x) {
       if (type-of(x) == #object)
-	"#<object " + x.name + ">";
+	"#<object " + x:fullname() + ">";
       else
 	real-GPS(x);
     }
@@ -100,11 +100,34 @@ define function match-verb(player, sent) {
       return false;
   }
 
+  define function match-hashes(s) {
+    define idx = index-of(s, "#");
+
+    if (idx) {
+      define rest = section(s, idx + 1, -1);
+      define n = as-num(rest);
+
+      if (n) {
+	define rego = Registry:at(n);
+	if (rego != undefined) {
+	  define m = rego:match-verb(sent);
+	  if (m)
+	    return m;
+	}
+      }
+
+      match-hashes(rest);
+    }
+
+    false;
+  }
+
   set-effuid(player);
-  player:match-verb(sent) ||
-	  match-contents-of(player) ||
-	  location(player):match-verb(sent) ||
-	  match-contents-of(location(player));
+  match-hashes(sent) ||
+    player:match-verb(sent) ||
+    match-contents-of(player) ||
+    location(player):match-verb(sent) ||
+    match-contents-of(location(player));
 }
 set-method-flags(match-verb, O_OWNER_MASK);
 
@@ -118,8 +141,20 @@ define function match-objects(player, match) {
   for-each(function (key) {
     define v = bindings[key];
 
-    if (type-of(v) == #string)
+    if (type-of(v) == #string) {
+      if (length(v) > 0 && equal?(section(v, 0, 1), "#")) {
+	define n = as-num(section(v, 1, -1));
+	if (n) {
+	  define rego = Registry:at(n);
+	  if (rego != undefined) {
+	    bindings[key] = [v, rego];
+	    return;
+	  }
+	}
+      }
+
       bindings[key] = [v, false];
+    }
   }, all-keys(bindings));
 }
 set-method-flags(match-objects, O_OWNER_MASK);

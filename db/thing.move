@@ -355,11 +355,11 @@ Thing:add-verb(#obj, #look-verb, ["look ", #obj]);
 Thing:add-verb(#obj, #look-verb, ["look at ", #obj]);
 
 define method (Thing) examine() {
-  define s = this.name + " (owned by " + owner(this).name + ")\n";
+  define s = this:fullname() + " (owned by " + owner(this):fullname() + ")\n";
 
   s = s + "Location: " + get-print-string(location(this)) + "\n";
 
-  s = s + "Contents: " + string-wrap-string(get-print-string(map(function (x) x.name,
+  s = s + "Contents: " + string-wrap-string(get-print-string(map(function (x) x:fullname(),
  								 contents(this))), 0) + "\n";
 
   {
@@ -375,8 +375,9 @@ define method (Thing) examine() {
     define pa = parents(this);
 
     if (length(pa) > 0) {
-      s = s + "Parent(s): " + pa[0].name;
-      s = reduce(function (acc, par) acc + ", " + par.name, s, section(pa, 1, length(pa) - 1)) +
+      s = s + "Parent(s): " + pa[0]:fullname();
+      s = reduce(function (acc, par) acc + ", " + par:fullname(), s,
+		 section(pa, 1, length(pa) - 1)) +
 	"\n";
     }
   }
@@ -403,15 +404,15 @@ define method (Thing) @who-verb(b) {
   define ap = Login.active-players;
   unlock(Login);
 
-  for-each(function (pl) p:tell("\t" + pl.name + " is in " + location(pl).name + ".\n"), ap);
+  for-each(function (pl) p:tell("\t" + pl:fullname() + " is in " + location(pl):fullname() + ".\n"), ap);
 }
 Thing:add-verb(#this, #@who-verb, ["@who"]);
 
 define method (Thing) @verbs-verb(b) {
-  define vbs = ["Verbs defined on " + this.name + " and it's parents:\n"];
+  define vbs = ["Verbs defined on " + this:fullname() + " and it's parents:\n"];
 
   define function tellverbs(x) {
-    vbs = vbs + ["  (" + x.name + ")\n"];
+    vbs = vbs + ["  (" + x:fullname() + ")\n"];
     for-each(function (v) {
       vbs = vbs + [
 		   "\t" +				// get-print-string(v[2]) + ": " +
@@ -437,11 +438,21 @@ define method (Thing) @space-verb(b) {
   if (this:space()) {
     oldloc:announce([realuid().name, " spaces ", this, ".\n"]);
     realuid():tell("You have @spaced " + get-print-string(this) + ".\n");
-  } else
+    return true;
+  } else {
     realuid():tell("You have no permission to @space that object.\n");
+    return false;
+  }
 }
 set-setuid(Thing:@space-verb, false);
 Thing:add-verb(#obj, #@space-verb, ["@space ", #obj]);
+
+define method (Thing) @dispose-verb(b) {
+  if (this:@space-verb(b))
+    Registry:deregister(this);
+}
+set-setuid(Thing:@dispose-verb, false);
+Thing:add-verb(#obj, #@dispose-verb, ["@dispose ", #obj]);
 
 checkpoint();
 shutdown();

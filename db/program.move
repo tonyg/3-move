@@ -33,7 +33,7 @@ define method (Program) @target-verb(b) {
   }
 
   this.target = tgt;
-  ptell("You target " + this.name + " at " + tgt.name + ".\n");
+  ptell("You target " + this:fullname() + " at " + tgt:fullname() + ".\n");
 }
 Program:add-verb(#program, #@target-verb, ["@target ", #program, " at ", #target]);
 

@@ -212,7 +212,7 @@ define method (Room) @@shout-verb(b) {
 
   define player = realuid();
   define message = [
-		    player.name + " shouts from " + location(player).name + ":\n",
+		    player.name + " shouts from " + location(player):fullname() + ":\n",
 		    "\t" + b[#sent][0] + "\n"
 		   ];
 
@@ -259,8 +259,8 @@ define method (Room) @dig-verb(b) {
     if (Exit:dig(backlinkname, dest, this))
       ptell("You dig the backlink exit, named \"" +
 	    backlinkname + "\", from \"" +
-	    dest.name + "\" to \"" +
-	    this.name + "\".\n");
+	    dest:fullname() + "\" to \"" +
+	    this:fullname() + "\".\n");
     else
       ptell("You fail to dig the backlink.\n");
   }
@@ -271,8 +271,8 @@ define method (Room) @dig-verb(b) {
   }
 
   if (Exit:dig(name, this, dest)) {
-      ptell("You dig the outward exit, named \"" + name + "\", from \"" + this.name + "\" to \"" +
-	    destname + "\".\n");
+      ptell("You dig the outward exit, named \"" + name + "\", from \"" + this:fullname() +
+	    "\" to \"" + dest:fullname() + "\".\n");
       if (created-dest)
 	dest:space();
   } else

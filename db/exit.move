@@ -117,7 +117,7 @@ define method (Exit) look() {
 make-method-overridable(Exit:look, true);
 
 define method (Exit) examine()
-  as(Thing):examine() + "The exit leads to " + this.dest.name + ".\n";
+  as(Thing):examine() + "The exit leads to " + this.dest:fullname() + ".\n";
 make-method-overridable(Exit:examine, true);
 
 define method (Exit) @editmsg-verb(b) {
