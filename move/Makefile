@@ -7,38 +7,46 @@
 #
 # Select the LIBS definition you want.
 
-INDEX_FILE = index.prim
-
 TARGET = move
 objects = barrier.o buffer.o conn.o gc.o hashtable.o main.o method.o \
-	object.o parser.o perms.o prim.o primload.o recmutex.o scanner.o \
-	slot.o vm.o
-prims = $(shell cat $(INDEX_FILE))
+	object.o parser.o perms.o persist.o prim.o primload.o recmutex.o \
+	scanner.o slot.o thread.o vm.o \
+	\
+	PRIM.io.o PRIM.compound.o PRIM.system.o PRIM.misc.o PRIM.object.o
 
-CC = gcc
-CFLAGS = -D_REENTRANT -DINDEX_FILE=\"$(INDEX_FILE)\" -c -Wall -g # -O2
-LFLAGS = -rdynamic -o $(TARGET) # -g
+LFLAGS = -o $(TARGET) # -g
 DELETE = rm -f
 
-#### Libraries for math and threading support. If you use sockets under EMX with OS/2,
-#### you will need -lsocket as well. Also supports dynamic linking under Linux.
-LIBS = -lm -lpthread -ldl
+######################### UNCOMMENT FOR LINUX
+CC = gcc
+CFLAGS = -D_REENTRANT -c -Wall -g -O2
+LIBS = -lpthread
 
-all: $(TARGET) $(prims)
+######################### UNCOMMENT FOR OSF/1 ON ALPHA
+##CC = cc
+##CFLAGS = -D_THREAD_SAFE -c -g # -O2
+##LIBS = -lpthread -lmach -lexc -lc
+
+######################### You shouldn't need to change below this line.
+
+all: $(TARGET)
+
+fullclean: clean
+	$(DELETE) $(TARGET)
 
 clean:
-	$(DELETE) *.o *~
+	$(DELETE) $(objects) *~
 
-distrib: clean
-	$(DELETE) $(TARGET)
-	$(DELETE) $(prims)
+distrib: fullclean
+	(pushd .. ; \
+	 tar --exclude RCS --exclude OOM --exclude .emacs.desktop --exclude .gdbinit \
+		-cvf move.tar move ; \
+	 popd )
+	gzip ../move.tar
 
 $(TARGET): $(objects) Makefile
 	$(CC) $(LFLAGS) $(objects) $(LIBS)
 #	strip $(TARGET)
-
-%.so: %.o
-	ld -o $@ -shared $<
 
 .c.o:
 	$(CC) $(CFLAGS) $<
