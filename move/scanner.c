@@ -57,6 +57,7 @@ PRIVATE char *compile_string_ext_rep(char *str) {
 	case 't': *dest = '\t'; break;
 	case 'b': *dest = '\b'; break;
 	case 'a': *dest = '\a'; break;
+	case 'e': *dest = 27; break;	/* backslash-E for escape. (for ANSI etc...) */
 	default: *dest = *src; break;
       }
     } else
