@@ -213,9 +213,11 @@ PRIVATE void patch16(CODE c, u16 o, u16 w) {
 #define DROP()			drop(code->parseinst)
 
 #define ERR(msg)		{char ERRbuf_[256]; \
-				 sprintf(ERRbuf_, "%d: %s", \
+				 check(code->parseinst, 0); \
+				 sprintf(ERRbuf_, "%d: %s (token = %d)", \
 					 code->parseinst->scaninst->linenum, \
-					 msg); \
+					 msg, \
+					 code->parseinst->scan_result); \
 				 vm_raise(code->parseinst->vms, \
 					  (OBJ) newsym("parse-error"), \
 					  (OBJ) newstring(ERRbuf_)); \
