@@ -69,6 +69,9 @@ define method (Exit) matches-name(name) {
   false;
 }
 
+define method (Exit) pre-move(oldloc, newloc) false;
+make-method-overridable(Exit:pre-move, true);
+
 define method (Exit) transport(item) {
   define oldloc = location(item);
   define caller = caller-effuid();
@@ -125,13 +128,13 @@ define method (Exit) @editmsg-verb(b) {
     return;
   }
 
-  if (index-of(msgname, this.editable-messages))
+  if (index-of(this.editable-messages, msgname))
     slot-set(this, msgname, editor(slot-ref(this, msgname)));
   else
     realuid():tell("That isn't an editable message.\n");
 }
 make-method-overridable(Exit:@editmsg-verb, true);
-Exit:add-verb(#this, #@editmsg-verb, ["@editmsg ", #msgname]);
+Exit:add-verb(#exit, #@editmsg-verb, ["@editmsg ", #msgname, " of ", #exit]);
 
 define method (Exit) go-verb(b) {
   this:transport(realuid());
