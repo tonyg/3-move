@@ -69,7 +69,7 @@ PUBLIC prim_fn lookup_prim(int number, int *primargc) {
   while (p != NULL) {
     if (p->number == number) {
 #ifdef DEBUG
-      printf("%p looked up prim %s\n", current_thread, p->name);
+      printf("%d looked up prim %s\n", current_thread ? current_thread->number : -1, p->name);
       fflush(stdout);
 #endif
       if (primargc != NULL)
