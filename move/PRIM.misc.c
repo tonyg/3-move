@@ -162,6 +162,34 @@ DEFPRIM(forkQuotaFun) {
   return MKNUM(begin_thread((OVECTOR) c, vms, NUM(q))->number);
 }
 
+DEFPRIM(getThreadTableFun) {
+  ThreadStat *tab;
+  VECTOR ans;
+  int i;
+  time_t timenow = time(NULL);
+
+  if (!PRIVILEGEDP(vms->r->vm_effuid))
+    return false;
+
+  tab = get_thread_stats();
+  ans = newvector_noinit(tab[0].number);
+
+  for (i = 1; i <= tab[0].number; i++) {
+    VECTOR t = newvector_noinit(4);
+    ATPUT(t, 0, MKNUM(tab[i].number));
+    ATPUT(t, 1, (OBJ) tab[i].owner);
+    ATPUT(t, 2, tab[i].sleeping ? true : false);
+    if (tab[i].sleeping)
+      ATPUT(t, 3, MKNUM(tab[i].status - timenow));
+    else
+      ATPUT(t, 3, MKNUM(tab[i].status));
+    ATPUT(ans, i - 1, (OBJ) t);
+  }
+
+  freemem(tab);
+  return (OBJ) ans;
+}
+
 PUBLIC void install_PRIM_misc(void) {
   srandom(time(NULL));
 
@@ -176,4 +204,5 @@ PUBLIC void install_PRIM_misc(void) {
   register_prim(2, "equal?", 0x03009, equalPFun);
   register_prim(1, "as-num", 0x0300A, asNumFun);
   register_prim(2, "fork/quota", 0x0300B, forkQuotaFun);
+  register_prim(0, "get-thread-table", 0x0300C, getThreadTableFun);
 }
