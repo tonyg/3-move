@@ -8,14 +8,19 @@ set-object-flags(Registry, O_NORMAL_FLAGS);
 Registry:set-name("Registry");
 Registry:set-description(["The registry of most user-accessible objects in the system.\n"]);
 
-define (Registry) next-number = 1;
-set-slot-flags(Registry, #next-number, O_OWNER_MASK);
+{
+  if (!has-slot(Registry, #next-number))
+    define (Registry) next-number = 1;
+  set-slot-flags(Registry, #next-number, O_OWNER_MASK);
 
-define (Registry) table-size = 1097;
-set-slot-flags(Registry, #table-size, O_OWNER_MASK);
+  if (!has-slot(Registry, #table-size))
+    define (Registry) table-size = 1097;
+  set-slot-flags(Registry, #table-size, O_OWNER_MASK);
 
-define (Registry) table = make-vector(Registry.table-size, []);
-set-slot-flags(Registry, #table, O_OWNER_MASK);
+  if (!has-slot(Registry, #table))
+    define (Registry) table = make-vector(Registry.table-size, []);
+  set-slot-flags(Registry, #table, O_OWNER_MASK);
+}
 
 define method (Registry) at(n) {
   define i = n % this.table-size;
