@@ -88,6 +88,12 @@ PRIVATE INLINE void restoreframe(VMSTATE vms, OVECTOR f) {
   vms->r->vm_effuid = (OBJECT) AT(f, FR_EFFUID);
 }
 
+PUBLIC INLINE void push_frame(VMSTATE vms) {
+  OVECTOR newf = newovector(FR_MAXSLOTINDEX, T_FRAME);
+  fillframe(vms, newf, vms->c.vm_ip);
+  vms->r->vm_frame = newf;
+}
+
 PUBLIC INLINE void apply_closure(VMSTATE vms, OVECTOR closure, VECTOR argvec) {
   if (closure == NULL || TAGGEDP(closure)) {
     vm_raise(vms, (OBJ) newsym("invalid-callable"), (OBJ) closure);
@@ -96,9 +102,6 @@ PUBLIC INLINE void apply_closure(VMSTATE vms, OVECTOR closure, VECTOR argvec) {
 
     if (fnp != NULL)
       vms->r->vm_acc = fnp(vms, argvec);
-
-    if (vms->r->vm_frame != NULL)
-      restoreframe(vms, vms->r->vm_frame);
   } else if (closure->type == T_CLOSURE) {
     OVECTOR meth = (OVECTOR) AT(closure, CL_METHOD);
 
@@ -106,6 +109,8 @@ PUBLIC INLINE void apply_closure(VMSTATE vms, OVECTOR closure, VECTOR argvec) {
       vm_raise(vms, (OBJ) newsym("no-permission"), NULL);
       return;
     }
+
+    push_frame(vms);
 
     vms->r->vm_env = argvec;
     ATPUT(vms->r->vm_env, 0, AT(meth, ME_ENV));
@@ -338,8 +343,8 @@ PUBLIC void vm_raise(VMSTATE vms, OBJ exception, OBJ arg) {
     ATPUT(argvec, 4, vms->r->vm_acc);
 
     vms->c.vm_top = 0;
-    vms->r->vm_frame = NULL;	/* If it ever returns, the thread dies. */
     apply_closure(vms, vms->r->vm_trap_closure, argvec);
+    vms->r->vm_frame = NULL;	/* If it ever returns, the thread dies. */
   } else {
     if (OVECTORP(exception) && ((OVECTOR) exception)->type == T_SYMBOL)
       fprintf(stderr, "excp sym = '%s\n", ((BVECTOR) AT((OVECTOR) exception, SY_NAME))->vec);
@@ -620,11 +625,15 @@ PUBLIC void run_vm(VMSTATE vms) {
       }
 
       case OP_FRAME:
+	fprintf(stderr, "A DISUSED INSTRUCTION, OP_FRAME, WAS INVOKED! Ouch!\n");
+	exit(3);
+#if 0
 	vm_hold = (OBJ) newovector(FR_MAXSLOTINDEX, T_FRAME);
 	fillframe(vms, (OVECTOR) vm_hold, vms->c.vm_ip + 3 + CODE16AT(vms->c.vm_ip+1));
 	vms->r->vm_frame = (OVECTOR) vm_hold;
 	vms->c.vm_ip += 3;
 	break;
+#endif
 
       case OP_CLOSURE:
 	vms->r->vm_acc = make_closure_from((OVECTOR) vms->r->vm_acc,
@@ -664,12 +673,14 @@ PUBLIC void run_vm(VMSTATE vms) {
       }
 
       case OP_RET:
-	if (vms->r->vm_frame == NULL) {
-	  gc_dec_safepoints();
-	  return;
+	if (vms->r->vm_frame != NULL) {
+	  restoreframe(vms, vms->r->vm_frame);
+	  if (vms->r->vm_code != NULL)
+	    break;
 	}
-	restoreframe(vms, vms->r->vm_frame);
-	break;
+
+	gc_dec_safepoints();
+	return;
 	
       case OP_CALL: {
 	OVECTOR methname = (OVECTOR) AT(vms->r->vm_lits, CODEAT(vms->c.vm_ip + 1));
@@ -697,6 +708,9 @@ PUBLIC void run_vm(VMSTATE vms) {
 	if (!MS_CAN_X(method, vms->r->vm_effuid)) {
 	  NOPERMISSION();
 	}
+
+	vms->c.vm_ip += 2;
+	push_frame(vms);
 
 	vms->r->vm_env = (VECTOR) POP();
 	ATPUT(vms->r->vm_env, 0, AT(method, ME_ENV));
@@ -737,6 +751,9 @@ PUBLIC void run_vm(VMSTATE vms) {
 	if (!MS_CAN_X(method, vms->r->vm_effuid)) {
 	  NOPERMISSION();
 	}
+
+	vms->c.vm_ip += 2;
+	push_frame(vms);
 
 	vms->r->vm_env = (VECTOR) POP();
 	ATPUT(vms->r->vm_env, 0, AT(method, ME_ENV));
@@ -854,10 +871,4 @@ PUBLIC OVECTOR getcont_from(VMSTATE vms) {
     ATPUT(cstk, i, AT(vms->r->vm_stack, i));
 
   return cont;
-}
-
-PUBLIC void push_frame(VMSTATE vms) {
-  OVECTOR newf = newovector(FR_MAXSLOTINDEX, T_FRAME);
-  fillframe(vms, newf, vms->c.vm_ip);
-  vms->r->vm_frame = newf;
 }

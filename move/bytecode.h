@@ -36,6 +36,8 @@
 #define OP_MAKE_VECTOR		0x23	/* val1 val2... OP n */	/* A <- n-elt vector fm stack */
 
 #define OP_FRAME		0x30	/* OP offset16 */	/* F <- new frame@ip+offset */
+	/* note that OP_FRAME is NOW DISUSED - it's automatically done by
+	   OP_CALL, OP_CALL_AS, and OP_APPLY... */
 #define OP_CLOSURE		0x31	/* OP */		/* A <- closed template from A */
 #define OP_METHOD_CLOSURE	0x32	/* OP namelitindex */	/* A <- closure A:name */
 #define OP_RET			0x33	/* OP */		/* restore VM <- F */

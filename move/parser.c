@@ -261,15 +261,11 @@ PRIVATE int compile_methodreference(CODE code, int asmethod) {
 
   if (CHECK('(')) { 
     int argc = 0;
-    u16 pos, argcloc;
+    u16 argcloc;
 
     DROP();
 
     gen(code, OP_PUSH);	/* save away the object the method is on */
-
-    gen(code, OP_FRAME);
-    pos = CURPOS(code);
-    gen16(code, 0);
 
     gen(code, OP_VECTOR);
     argcloc = CURPOS(code);
@@ -304,8 +300,6 @@ PRIVATE int compile_methodreference(CODE code, int asmethod) {
 
     gen(code, asmethod ? OP_CALL_AS : OP_CALL);
     GEN_LIT(code, methname);
-
-    JUMP_HERE_FROM(code, pos);
   } else {
     if (asmethod) {
       ERR("as() methods need to be called, they can't be stored");
@@ -322,7 +316,7 @@ PRIVATE int applic_parse(CODE code, OVECTOR currid, int lvalue, int isslot) {
   while (1) {
     if (CHECK('(')) {
       int argc = 0;
-      u16 pos, argcloc;
+      u16 argcloc;
 
       DROP();
 
@@ -335,10 +329,6 @@ PRIVATE int applic_parse(CODE code, OVECTOR currid, int lvalue, int isslot) {
 	}
       } else
 	gen(code, OP_PUSH);
-
-      gen(code, OP_FRAME);
-      pos = CURPOS(code);
-      gen16(code, 0);
 
       gen(code, OP_VECTOR);
       argcloc = CURPOS(code);
@@ -376,8 +366,6 @@ PRIVATE int applic_parse(CODE code, OVECTOR currid, int lvalue, int isslot) {
       }
 
       gen(code, OP_APPLY);
-
-      JUMP_HERE_FROM(code, pos);
 
       lvalue = 0;
       continue;
@@ -425,13 +413,9 @@ PRIVATE int applic_parse(CODE code, OVECTOR currid, int lvalue, int isslot) {
     lvalue = isslot = 0;
 
     if (CHECK('[')) {
-      u16 pos, retpos;
+      u16 pos;
 
       DROP();
-
-      gen(code, OP_FRAME);
-      retpos = CURPOS(code);
-      gen16(code, 0);
 
       gen(code, OP_PUSH);
       gen(code, OP_VECTOR);
@@ -460,13 +444,11 @@ PRIVATE int applic_parse(CODE code, OVECTOR currid, int lvalue, int isslot) {
 	gen(code, OP_MOV_A_GLOB);
 	GEN_LIT(code, newsym("element-set"));
 	gen(code, OP_APPLY);
-	JUMP_HERE_FROM(code, retpos);
 	break;
       } else {
 	gen(code, OP_MOV_A_GLOB);
 	GEN_LIT(code, newsym("element-ref"));
 	gen(code, OP_APPLY);
-	JUMP_HERE_FROM(code, retpos);
 	continue;
       }
     }
@@ -609,13 +591,9 @@ PRIVATE int infix_op_parse(CODE code) {
 
   /****************************************
   while (CHECK(IDENT)) {
-    u16 retpos;
     OVECTOR name = (OVECTOR) yylval;
     DROP();
 
-    gen(code, OP_FRAME);
-    retpos = CURPOS(code);
-    gen16(code, 0);
     gen(code, OP_PUSH);
     PREPARE_CALL(code, 2);
     gen(code, OP_SWAP);
@@ -629,7 +607,6 @@ PRIVATE int infix_op_parse(CODE code) {
 
     compile_varref(code, name);
     gen(code, OP_APPLY);
-    JUMP_HERE_FROM(code, retpos);
   }
   ****************************************/
 
@@ -857,22 +834,18 @@ PRIVATE OVECTOR compile_template(CODE code, int argc) {
 PRIVATE int expr_parse(CODE code) {
   if (CHECK(K_DEFINE)) {
     OVECTOR name;
-    u16 frame_pos, frame, offset;
+    u16 frame, offset;
 
     DROP();
 
     if (CHECK(K_METHOD)) {
       int argc;
       OVECTOR template;
-      u16 retpos;
 
       DROP();
       CHKERR('(', "'define method' requires a target enclosed in parens");
       DROP();
 
-      gen(code, OP_FRAME);
-      retpos = CURPOS(code);
-      gen16(code, 0);
       PREPARE_CALL(code, 3);
 
       if (!expr_parse(code))
@@ -916,19 +889,13 @@ PRIVATE int expr_parse(CODE code) {
       gen(code, OP_MOV_A_GLOB);
       GEN_LIT(code, newsym("add-method"));
       gen(code, OP_APPLY);
-      JUMP_HERE_FROM(code, retpos);
 
       return 1;
     }
 
     if (CHECK('(')) {
-      u16 retpos;
-
       DROP();
 
-      gen(code, OP_FRAME);
-      retpos = CURPOS(code);
-      gen16(code, 0);
       PREPARE_CALL(code, 3);
 
       if (!expr_parse(code))
@@ -963,15 +930,11 @@ PRIVATE int expr_parse(CODE code) {
       gen(code, OP_MOV_A_GLOB);
       GEN_LIT(code, newsym("add-slot"));
       gen(code, OP_APPLY);
-      JUMP_HERE_FROM(code, retpos);
 
       return 1;
     }
 
     if (code->scope == NULL) {
-      gen(code, OP_FRAME);
-      frame_pos = CURPOS(code);
-      gen16(code, 0);
       PREPARE_CALL(code, 2);
     }
 
@@ -1041,7 +1004,6 @@ PRIVATE int expr_parse(CODE code) {
       gen(code, OP_MOV_A_GLOB);
       GEN_LIT(code, newsym("define-global"));
       gen(code, OP_APPLY);
-      JUMP_HERE_FROM(code, frame_pos);
     } else {
       gen(code, OP_MOV_LOCL_A);
       gen(code, frame);
@@ -1208,13 +1170,9 @@ PRIVATE int expr_parse(CODE code) {
 
   if (CHECK(K_BIND_CC)) {
     OVECTOR template;
-    u16 retpos;
 
     DROP();
 
-    gen(code, OP_FRAME);
-    retpos = CURPOS(code);
-    gen16(code, 0);
     PREPARE_CALL(code, 1);
 
     add_scope(code);
@@ -1237,7 +1195,6 @@ PRIVATE int expr_parse(CODE code) {
     gen(code, OP_MOV_A_GLOB);
     GEN_LIT(code, newsym("call/cc"));
     gen(code, OP_APPLY);
-    JUMP_HERE_FROM(code, retpos);
     return 1;
   }
 

@@ -64,10 +64,7 @@ DEFPRIM(setEffuid) {
   if (!PRIVILEGEDP(vms->r->vm_effuid))
     return false;
 
-  if (vms->r->vm_frame == NULL)
-    return false;
-
-  ATPUT(vms->r->vm_frame, FR_EFFUID, (OBJ) u);
+  vms->r->vm_effuid = (OBJECT) u;
   return true;
 }
 
@@ -147,6 +144,7 @@ DEFPRIM(setHandlerFun) {
 
 #define ISACONN(x)	(OVECTORP(x) && ((OVECTOR) x)->type == T_CONNECTION)
 
+#if 0
 DEFPRIM(setConnectionsFun) {
   OBJ i = ARG(0);
   OBJ o = ARG(1);
@@ -160,6 +158,7 @@ DEFPRIM(setConnectionsFun) {
   vms->r->vm_output = (OVECTOR) o;
   return true;
 }
+#endif
 
 DEFPRIM(getCurrThreadFun) {
   THREAD t = find_thread_by_tid(pthread_self());
@@ -199,12 +198,10 @@ DEFPRIM(callCCFun) {
 
   TYPEERRIF(!(OVECTORP(c) && closure->type == T_CLOSURE));
 
-  av = newvector_noinit(2);
-  ATPUT(av, 0, NULL);
-  ATPUT(av, 1, (OBJ) getcont_from(vms));
-
+  av = newvector(2);
   apply_closure(vms, closure, av);
-  push_frame(vms);
+
+  ATPUT(av, 1, (OBJ) getcont_from(vms));
 
   return vms->r->vm_acc;
 }
@@ -251,11 +248,6 @@ DEFPRIM(callerEffuidFun) {
   if (f == NULL)
     return undefined;
 
-  f = (OVECTOR) AT(f, FR_FRAME);
-
-  if (f == NULL)
-    return undefined;
-
   return AT(f, FR_EFFUID);
 }
 
@@ -288,7 +280,7 @@ PUBLIC void install_PRIM_system(void) {
   register_prim("define-global", 0x02008, defineGlobal);
   register_prim("type-of", 0x02009, typeOfFun);
   register_prim("set-exception-handler", 0x0200A, setHandlerFun);
-  register_prim("set-connections", 0x0200B, setConnectionsFun);
+  /* register_prim("set-connections", 0x0200B, setConnectionsFun); */
   register_prim("current-thread", 0x0200C, getCurrThreadFun);
   register_prim("set-thread-quota", 0x0200D, setThreadQuotaFun);
   register_prim("checkpoint", 0x0200E, checkpointFun);
