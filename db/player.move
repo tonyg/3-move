@@ -162,6 +162,10 @@ define method (Player) pre-accept(what, oldloc)
   !isa(what, Player);
 make-method-overridable(Player:pre-accept, true);
 
+define method (Player) release(what, newloc)
+  realuid() == this;
+make-method-overridable(Player:release, true);
+
 ////////////////////////////////////////////////////////////////
 // WIZARDY STUFF
 
@@ -392,6 +396,10 @@ define method (Player) home-verb(b) {
 }
 Player:add-verb(#this, #home-verb, ["home"]);
 
+define method (Player) @space-verb(b) {
+  realuid():tell("You can't @space players.\n");
+}
+
 define method (Player) @quit-verb(b) {
   if (caller-effuid() != owner(this))
     return;
@@ -412,6 +420,14 @@ define method (Player) @build-verb(b) {
       ptell("I don't recognise that name for a parent object, sorry.\n");
       return false;
     }
+  }
+
+  if (object-named(oname)) {
+    ptell("That name already exists, searching for a replacement...\n");
+    define i = 1;
+    while (object-named(oname + get-print-string(i))) i = i + 1;
+    oname = oname + get-print-string(i);
+    ptell("Replacement name: " + oname + "\n");
   }
 
   define obj = pval:clone();
