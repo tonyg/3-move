@@ -107,8 +107,8 @@ DEFPRIM(sleepFun) {
   if (numseconds > 600 && !PRIVILEGEDP(vms->r->vm_effuid))
     return false;
 
-  if (numseconds <= 1)
-    return true;		/* not worth waiting. */
+  if (numseconds <= 0)
+    return true;		/* not worth waiting :-) */
 
   sleep_thread(numseconds);
   return yield_thread;
