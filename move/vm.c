@@ -102,11 +102,13 @@ PUBLIC INLINE void apply_closure(VMSTATE vms, OVECTOR closure, VECTOR argvec) {
 
     if (fnp != NULL)
       vms->r->vm_acc = fnp(vms, argvec);
+    else
+      vm_raise(vms, (OBJ) newsym("invalid-primitive"), AT(closure, PR_NUMBER));
   } else if (closure->type == T_CLOSURE) {
     OVECTOR meth = (OVECTOR) AT(closure, CL_METHOD);
 
     if (!MS_CAN_X(meth, vms->r->vm_effuid)) {
-      vm_raise(vms, (OBJ) newsym("no-permission"), NULL);
+      vm_raise(vms, (OBJ) newsym("no-permission"), AT(meth, ME_NAME));
       return;
     }
 
@@ -336,6 +338,8 @@ PUBLIC void vm_raise(VMSTATE vms, OBJ exception, OBJ arg) {
 
     push_frame(vms);
 
+    printf("%ld raising %s\n", pthread_self(), ((BVECTOR) AT((OVECTOR) exception, SY_NAME))->vec);
+
     ATPUT(argvec, 0, NULL);
     ATPUT(argvec, 1, exception);
     ATPUT(argvec, 2, arg);
@@ -407,7 +411,7 @@ PUBLIC VECTOR vector_concat(VECTOR a, VECTOR b) {
 	vms->c.vm_ip++; \
 	break
 
-#define NOPERMISSION()	vm_raise(vms, (OBJ) newsym("no-permission"), NULL); break
+#define NOPERMISSION(x)	vm_raise(vms, (OBJ) newsym("no-permission"), x); break
 
 PUBLIC void run_vm(VMSTATE vms) {
   OBJ vm_hold;	/* Holding register. NOT SEEN BY GC */
@@ -486,11 +490,12 @@ PUBLIC void run_vm(VMSTATE vms) {
 	  break;
 	}
 
+	slotname = (OVECTOR) AT(vms->r->vm_lits, CODEAT(vms->c.vm_ip + 1));
+
 	if (!O_CAN_X((OBJECT) vms->r->vm_acc, vms->r->vm_effuid)) {
-	  NOPERMISSION();
+	  NOPERMISSION((OBJ) slotname);
 	}
 
-	slotname = (OVECTOR) AT(vms->r->vm_lits, CODEAT(vms->c.vm_ip + 1));
 	slot = findslot((OBJECT) vms->r->vm_acc, slotname, NULL);
 
 	if (slot == NULL) {
@@ -499,7 +504,7 @@ PUBLIC void run_vm(VMSTATE vms) {
 	}
 
 	if (!MS_CAN_R(slot, vms->r->vm_effuid)) {
-	  NOPERMISSION();
+	  NOPERMISSION((OBJ) slotname);
 	}
 
 	vms->r->vm_acc = AT(slot, SL_VALUE);
@@ -526,7 +531,7 @@ PUBLIC void run_vm(VMSTATE vms) {
 
       case OP_MOV_GLOB_A:
 	if (!PRIVILEGEDP(vms->r->vm_effuid)) {
-	  NOPERMISSION();
+	  NOPERMISSION((OBJ) newsym("setting-global-value"));
 	}
 	vm_hold = AT(vms->r->vm_lits, CODEAT(vms->c.vm_ip + 1));
 	ATPUT((OVECTOR) vm_hold, SY_VALUE, vms->r->vm_acc);
@@ -543,11 +548,12 @@ PUBLIC void run_vm(VMSTATE vms) {
 	  break;
 	}
 
+	slotname = (OVECTOR) AT(vms->r->vm_lits, CODEAT(vms->c.vm_ip + 1));
+
 	if (!O_CAN_X(target, vms->r->vm_effuid)) {
-	  NOPERMISSION();
+	  NOPERMISSION((OBJ) slotname);
 	}
 
-	slotname = (OVECTOR) AT(vms->r->vm_lits, CODEAT(vms->c.vm_ip + 1));
 	slot = findslot(target, slotname, &foundin);
 
 	if (slot == NULL) {
@@ -556,7 +562,7 @@ PUBLIC void run_vm(VMSTATE vms) {
 	}
 
 	if (!MS_CAN_W(slot, vms->r->vm_effuid)) {
-	  NOPERMISSION();
+	  NOPERMISSION((OBJ) slotname);
 	}
 
 	if (foundin == target) {
@@ -573,7 +579,7 @@ PUBLIC void run_vm(VMSTATE vms) {
 
       case OP_MOV_FRAM_A:
 	if (!PRIVILEGEDP(vms->r->vm_effuid)) {
-	  NOPERMISSION();
+	  NOPERMISSION((OBJ) newsym("restoring-vm-frame-pointer"));
 	}
 
 	if (!OVECTORP(vms->r->vm_acc) || ((OVECTOR) vms->r->vm_acc)->type != T_FRAME) {
@@ -660,7 +666,7 @@ PUBLIC void run_vm(VMSTATE vms) {
 	}
 
 	if (!MS_CAN_R(method, vms->r->vm_effuid)) {
-	  NOPERMISSION();
+	  NOPERMISSION((OBJ) methname);
 	}
 
 	vm_hold = (OBJ) newovector(CL_MAXSLOTINDEX, T_CLOSURE);
@@ -706,7 +712,7 @@ PUBLIC void run_vm(VMSTATE vms) {
 	}
 
 	if (!MS_CAN_X(method, vms->r->vm_effuid)) {
-	  NOPERMISSION();
+	  NOPERMISSION((OBJ) methname);
 	}
 
 	vms->c.vm_ip += 2;
@@ -749,7 +755,7 @@ PUBLIC void run_vm(VMSTATE vms) {
 	}
 
 	if (!MS_CAN_X(method, vms->r->vm_effuid)) {
-	  NOPERMISSION();
+	  NOPERMISSION((OBJ) methname);
 	}
 
 	vms->c.vm_ip += 2;

@@ -36,7 +36,7 @@ PRIVATE void register_thread(THREAD thr) {
 
   LOCKTAB();
 #ifdef DEBUG
-  printf("regthread %d\n", thr->number);
+  printf("%ld regthread %d\n", pthread_self(), thr->number);
 #endif
   thr->next = threadtab[n];
   threadtab[n] = thr;
@@ -145,6 +145,7 @@ PUBLIC THREAD find_thread_by_vms(VMSTATE vms) {
 
 typedef struct ThreadArgs {
   int restarting;
+  int quota;
   OVECTOR closure;
   THREAD thr;
 } ThreadArgs;
@@ -165,6 +166,7 @@ PRIVATE void *thread_body(void *args) {
 
     register_thread(thr);
 
+    vms->c.vm_state = ta->quota;
     vms->r->vm_input = parentvms->r->vm_input;
     vms->r->vm_output = parentvms->r->vm_output;
     vms->r->vm_uid = parentvms->r->vm_uid;
@@ -173,7 +175,13 @@ PRIVATE void *thread_body(void *args) {
 
     apply_closure(vms, ta->closure, newvector_noinit(1));
   } else {
+    int i;
+
     register_thread(thr);
+
+    for (i = 0; i < thr->vms->c.vm_locked_count; i++) {
+      LOCK(thr->vms->r->vm_locked);
+    }
   }
 
   protect((OBJ *) &thr->vms->r);
@@ -181,6 +189,7 @@ PRIVATE void *thread_body(void *args) {
   pthread_mutex_lock(&fork_mutex);
   pthread_cond_signal(&fork_signal);
   pthread_mutex_unlock(&fork_mutex);
+  /* NOTE: don't use ta or args from this point on. */
 
   run_vm(thr->vms);
 
@@ -203,7 +212,7 @@ PRIVATE void *thread_body(void *args) {
   return NULL;
 }
 
-PRIVATE THREAD real_begin_thread(int oldnumber, OVECTOR closure, VMSTATE vms) {
+PRIVATE THREAD real_begin_thread(int oldnumber, OVECTOR closure, VMSTATE vms, int quota) {
   ThreadArgs *ta = allocmem(sizeof(ThreadArgs));
   pthread_t tid;
 
@@ -215,6 +224,7 @@ PRIVATE THREAD real_begin_thread(int oldnumber, OVECTOR closure, VMSTATE vms) {
   } else
     ta->restarting = 1;
 
+  ta->quota = quota;
   ta->closure = closure;
   ta->thr = allocmem(sizeof(Thread));
   ta->thr->number = oldnumber;
@@ -228,11 +238,15 @@ PRIVATE THREAD real_begin_thread(int oldnumber, OVECTOR closure, VMSTATE vms) {
   pthread_cond_wait(&fork_signal, &fork_mutex);
   pthread_mutex_unlock(&fork_mutex);
 
-  return ta->thr;
+  {
+    THREAD ttt = ta->thr;
+    freemem(ta);
+    return ttt;
+  }
 }
 
-PUBLIC THREAD begin_thread(OVECTOR closure, VMSTATE parentvms) {
-  return real_begin_thread(-1, closure, parentvms);
+PUBLIC THREAD begin_thread(OVECTOR closure, VMSTATE parentvms, int cpu_quota) {
+  return real_begin_thread(-1, closure, parentvms, cpu_quota);
 }
 
 PUBLIC void save_restartable_threads(void *phandle, FILE *f) {
@@ -283,8 +297,9 @@ PUBLIC void load_restartable_threads(void *phandle, FILE *f) {
     vms = allocmem(sizeof(VMstate));
     fread(&vms->c, sizeof(VMregs_C), 1, f);
     vms->r = (VMREGS) load(phandle);
+    printf("(vm_locked is %p at %d)\n", vms->r->vm_locked, vms->c.vm_locked_count);
     printf("(vm_state is %d)\n", vms->c.vm_state);
 
-    real_begin_thread(i, NULL, vms);
+    real_begin_thread(i, NULL, vms, 0);
   }
 }

@@ -92,6 +92,8 @@ DEFPRIM(getPrintString) {
   return (OBJ) getPrintString_body(vms, ARG(0), 0);
 }
 
+#include <unistd.h>
+
 DEFPRIM(printOn) {
   OBJ conn = ARG(0);
   OBJ val = ARG(1);

@@ -6,6 +6,10 @@
 #include "vm.h"
 #include "prim.h"
 
+#if 0
+#define DEBUG
+#endif
+
 #define PRIMTAB_SIZE	419
 
 typedef struct primrec {
@@ -27,22 +31,36 @@ PUBLIC void init_prim(void) {
 PUBLIC void register_prim(char *name, int number, prim_fn fn) {
   int hash = number % PRIMTAB_SIZE;
   primrec *p = allocmem(sizeof(primrec));
-  OVECTOR pobj;
-  OVECTOR pname;
 
   p->name = name;
   p->number = number;
   p->fn = fn;
   p->next = primtab[hash];
   primtab[hash] = p;
+}
 
-  pname = newsym(name);
-  if (AT(pname, SY_VALUE) == undefined) {
-    pobj = newovector(PR_MAXSLOTINDEX, T_PRIM);
-    ATPUT(pobj, PR_NAME, (OBJ) pname);
-    ATPUT(pobj, PR_NUMBER, MKNUM(number));
-    ATPUT(pname, SY_VALUE, (OBJ) pobj);
+PUBLIC void bind_primitives_to_symbols(void) {
+  int i;
+
+  gc_inc_safepoints();
+
+  for (i = 0; i < PRIMTAB_SIZE; i++) {
+    primrec *p = primtab[i];
+
+    while (p != NULL) {
+      OVECTOR pname = newsym(p->name);
+      if (AT(pname, SY_VALUE) == undefined) {
+	OVECTOR pobj = newovector(PR_MAXSLOTINDEX, T_PRIM);
+	ATPUT(pobj, PR_NAME, (OBJ) pname);
+	ATPUT(pobj, PR_NUMBER, MKNUM(p->number));
+	ATPUT(pname, SY_VALUE, (OBJ) pobj);
+      }
+
+      p = p->next;
+    }
   }
+
+  gc_dec_safepoints();
 }
 
 PUBLIC prim_fn lookup_prim(int number) {
@@ -50,8 +68,13 @@ PUBLIC prim_fn lookup_prim(int number) {
   primrec *p = primtab[hash];
 
   while (p != NULL) {
-    if (p->number == number)
+    if (p->number == number) {
+#ifdef DEBUG
+      printf("%ld looked up prim %s\n", pthread_self(), p->name);
+      fflush(stdout);
+#endif
       return p->fn;
+    }
 
     p = p->next;
   }

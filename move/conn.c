@@ -18,6 +18,7 @@ PUBLIC OVECTOR newfileconn(int fd) {
 
   c->finalize = 1;
   ATPUT(c, CO_TYPE, MKNUM(CONN_FILE));
+  ATPUT(c, CO_UNGETC, MKNUM(-1));
   ATPUT(c, CO_INFO, NULL);
   ATPUT(c, CO_HANDLE, MKNUM(fd));
 
@@ -29,10 +30,15 @@ PUBLIC OVECTOR newstringconn(BVECTOR data) {
 
   c->finalize = 1;
   ATPUT(c, CO_TYPE, MKNUM(CONN_STRING));
+  ATPUT(c, CO_UNGETC, MKNUM(-1));
   ATPUT(c, CO_INFO, MKNUM(0));
   ATPUT(c, CO_HANDLE, (OBJ) data);
 
   return c;
+}
+
+PRIVATE void conn_ungetc(OVECTOR conn, int ch) {
+  ATPUT(conn, CO_UNGETC, MKNUM(ch));
 }
 
 PRIVATE int stringconn_getter(OVECTOR conn) {
@@ -41,6 +47,12 @@ PRIVATE int stringconn_getter(OVECTOR conn) {
 
   if (conn_closed(conn))
     return -1;
+
+  if (NUM(AT(conn, CO_UNGETC)) != -1) {
+    int u = NUM(AT(conn, CO_UNGETC));
+    ATPUT(conn, CO_UNGETC, MKNUM(-1));
+    return u;
+  }
 
   if (pos >= data->_.length) {
     conn_close(conn);
@@ -57,6 +69,12 @@ PRIVATE int fileconn_getter(OVECTOR conn) {
   if (conn_closed(conn))
     return -1;
 
+  if (NUM(AT(conn, CO_UNGETC)) != -1) {
+    int u = NUM(AT(conn, CO_UNGETC));
+    ATPUT(conn, CO_UNGETC, MKNUM(-1));
+    return u;
+  }
+
   if (read(NUM(AT(conn, CO_HANDLE)), &buf, 1) != 1) {
     conn_close(conn);
     return -1;
@@ -69,6 +87,8 @@ PRIVATE int nullconn_getter(void *arg) {
   return -1;
 }
 
+#define CONN_GETS_GETC(conn) ((NUM(AT(conn, CO_TYPE)) == CONN_FILE) ? fileconn_getter(conn) : -1)
+
 PUBLIC char *conn_gets(char *s, int size, OVECTOR conn) {
   char *org = s;
   int c;
@@ -76,24 +96,28 @@ PUBLIC char *conn_gets(char *s, int size, OVECTOR conn) {
   if (conn_closed(conn))
     return NULL;
 
-  do {
-    c = (NUM(AT(conn, CO_TYPE)) == CONN_FILE) ? fileconn_getter(conn) : -1;
-  } while (c == '\r' || c == '\n');
+  if (NUM(AT(conn, CO_TYPE)) != CONN_FILE)
+    return NULL;
 
   while (size > 1) {
-    if (c == -1) {
-      return NULL;
-    }
+    c = CONN_GETS_GETC(conn);
 
-    if (c == '\r' || c == '\n') {
+    if (c == -1)
+      return NULL;
+
+    if (c == '\r') {
+      int c2 = CONN_GETS_GETC(conn);
+      if (c2 != '\n')
+	conn_ungetc(conn, c2);
       break;
     }
+
+    if (c == '\n')
+      break;
 
     *s = c;
     s++;
     size--;
-
-    c = (NUM(AT(conn, CO_TYPE)) == CONN_FILE) ? fileconn_getter(conn) : -1;
   }
 
   *s = '\0';

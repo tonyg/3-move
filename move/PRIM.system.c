@@ -269,6 +269,15 @@ DEFPRIM(shutdownFun) {
   exit(0);
 }
 
+DEFPRIM(symValFun) {
+  OBJ s = ARG(0);
+  OVECTOR sym = (OVECTOR) s;
+
+  TYPEERRIF(!(OVECTORP(s) && sym->type == T_SYMBOL));
+
+  return AT(sym, SY_VALUE);
+}
+
 PUBLIC void install_PRIM_system(void) {
   /* register_prim("input-conn", 0x02001, getInConn); */
   /* register_prim("output-conn", 0x02002, getOutConn); */
@@ -290,4 +299,5 @@ PUBLIC void install_PRIM_system(void) {
   register_prim("caller-effuid", 0x02012, callerEffuidFun);
   register_prim("in-group-of", 0x02013, inGroupOfFun);
   register_prim("shutdown", 0x02014, shutdownFun);
+  register_prim("symbol-value", 0x02015, symValFun);
 }

@@ -68,7 +68,7 @@ DEFPRIM(timeVectorFun) {
 DEFPRIM(forkFun) {
   OBJ c = ARG(0);
   TYPEERRIF(!(OVECTORP(c) && ((OVECTOR) c)->type == T_CLOSURE));
-  return MKNUM(begin_thread((OVECTOR) c, vms)->number);
+  return MKNUM(begin_thread((OVECTOR) c, vms, VM_DEFAULT_CPU_QUOTA)->number);
 }
 
 DEFPRIM(killFun) {
@@ -83,9 +83,12 @@ DEFPRIM(killFun) {
     return false;
 
   t = find_thread_by_number(NUM(tnum));
-  vm_raise(t->vms, excp, arg);
 
-  return true;
+  if (t != NULL) {
+    vm_raise(t->vms, excp, arg);
+    return true;
+  } else
+    return false;
 }
 
 DEFPRIM(sleepFun) {
@@ -131,6 +134,18 @@ DEFPRIM(asNumFun) {
   return undefined;
 }
 
+DEFPRIM(forkQuotaFun) {
+  OBJ c = ARG(0);
+  OBJ q = ARG(1);
+
+  TYPEERRIF(!(OVECTORP(c) && ((OVECTOR) c)->type == T_CLOSURE) || !NUMP(q));
+
+  if (!PRIVILEGEDP(vms->r->vm_effuid))
+    return false;
+
+  return MKNUM(begin_thread((OVECTOR) c, vms, NUM(q))->number);
+}
+
 PUBLIC void install_PRIM_misc(void) {
   srandom(time(NULL));
 
@@ -144,4 +159,5 @@ PUBLIC void install_PRIM_misc(void) {
   register_prim("sleep", 0x03008, sleepFun);
   register_prim("equal?", 0x03009, equalPFun);
   register_prim("as-num", 0x0300A, asNumFun);
+  register_prim("fork/quota", 0x0300B, forkQuotaFun);
 }

@@ -89,6 +89,7 @@ typedef enum FrameSlots {
 
 typedef enum ConnectionSlots {
   CO_TYPE = 0,			/* kind of connection */
+  CO_UNGETC,			/* buffer for conn_ungetc. */
   CO_INFO,			/* type-specific connection state */
   CO_HANDLE,			/* type-specific connection handle */
 

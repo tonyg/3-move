@@ -1,10 +1,12 @@
-// player.move
+// player.move -- also stuff on Wizard!
 set-realuid(Wizard);
 set-effuid(Wizard);
 
 define Player = Thing:clone();
 set-object-flags(Player, O_NORMAL_FLAGS);
 move-to(Player, null);
+
+Player:set-description(["You see a player who needs to @describe %r.\n"]);
 
 define method (Player) clone() {
   if (!privileged?(effuid()))
@@ -13,7 +15,25 @@ define method (Player) clone() {
     as(Thing):clone();
 }
 set-setuid(Player:clone, false);
-set-method-flags(Player:clone, O_ALL_PERMS);
+
+define method (Player) initialize() {
+  set-owner(this, this);
+  this:set-name("NewPlayer");
+  lock(Login);
+  Login.players = Login.players + [this];
+  unlock(Login);
+}
+set-method-flags(Player:initialize, O_OWNER_MASK);
+
+define method (Player) new(newname) {
+  define p = Player:clone();
+  p:set-name(newname);
+  p;
+}
+set-setuid(Player:new, false);
+set-method-flags(Player:new, O_OWNER_MASK);
+
+Player:set-name("Generic Player");
 
 define method (Player) set-name(n) {
   if (!privileged?(caller-effuid()))
@@ -21,9 +41,6 @@ define method (Player) set-name(n) {
   else
     as(Thing):set-name(n);
 }
-set-method-flags(Player:set-name, O_ALL_PERMS);
-
-Player:set-name("Generic Player");
 
 define (Player) password = "";
 set-slot-flags(Player, #password, O_OWNER_MASK);
@@ -35,10 +52,9 @@ define method (Player) set-password(newpass) {
   this.password = newpass;
   true;
 }
-set-method-flags(Player:set-password, O_ALL_PERMS);
 
 define (Player) connection = null;
-set-slot-flags(Player, #connection, O_ALL_R);
+set-slot-flags(Player, #connection, O_OWNER_MASK);
 
 define (Player) awake = false;
 set-slot-flags(Player, #awake, O_ALL_R);
@@ -46,14 +62,19 @@ set-slot-flags(Player, #awake, O_ALL_R);
 define (Player) home = null;
 set-slot-flags(Player, #home, O_ALL_R);
 
+define (Player) gender = #neuter;
+set-slot-flags(Player, #gender, O_ALL_R | O_OWNER_MASK);
+
+define (Player) screen-length = 20;
+set-slot-flags(Player, #screen-length, O_ALL_R | O_OWNER_MASK);
+
 define method (Player) set-home(newhome) {
   if (caller-effuid() != owner(this) && !privileged?(caller-effuid()))
     return false;
 
-  this.homd = newhome;
+  this.home = newhome;
   true;
 }
-set-method-flags(Player:set-home, O_ALL_PERMS);
 
 define (Player) is-programmer = false;
 set-slot-flags(Player, #is-programmer, O_ALL_R);
@@ -65,19 +86,20 @@ define method (Player) set-programmer(v) {
   this.is-programmer = v;
   true;
 }
-set-method-flags(Player:set-programmer, O_ALL_PERMS);
 
 define method (Player) connect-function() {
   this:moveto(this.home);
+  location(this):announce(this.name + " wakes up.\n");
 }
 set-setuid(Player:connect-function, false);
-set-method-flags(Player:connect-function, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Player:connect-function, true);
 
 define method (Player) disconnect-function() {
+  location(this):announce(this.name + " goes to sleep.\n");
   this:moveto(this.home);
 }
 set-setuid(Player:disconnect-function, false);
-set-method-flags(Player:disconnect-function, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Player:disconnect-function, true);
 
 define method (Player) match-object(name) {
   if (equal?(name, "me"))
@@ -85,7 +107,7 @@ define method (Player) match-object(name) {
 
   return as(Thing):match-object(name);
 }
-set-method-flags(Player:match-object, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Player:match-object, true);
 
 define method (Player) read() {
   if (type-of(this.connection) == #connection)
@@ -93,22 +115,267 @@ define method (Player) read() {
   else
     "";
 }
-set-method-flags(Player:read, O_ALL_PERMS);
+
+define method (Player) mtell(v) {
+  if (this:listening?()) {
+    if (realuid() == this) {
+      define i = 0;
+      define count = 0;
+
+      while (i < length(v)) {
+        this:tell(v[i]);
+	i = i + 1;
+	count = count + 1;
+
+	if (this.screen-length && count >= this.screen-length) {
+          this:tell("Press ENTER for more, or type q to quit:");
+	  if (equal?(this:read(), "q"))
+	    return;
+	  count = 0;
+	}
+      }
+    } else
+      for-each(this:tell, v);
+  }
+}
 
 define method (Player) tell(x) {
   if (this:listening?())
     print-on(this.connection, get-print-string(x));
 }
-set-method-flags(Player:tell, O_ALL_PERMS);
 
 define method (Player) listening?()
   this.awake && type-of(this.connection) == #connection;
-set-method-flags(Player:listening?, O_ALL_PERMS);
+
+define method (Player) pre-accept(what, oldloc)
+  !isa(what, Player);
+make-method-overridable(Player:pre-accept, true);
 
 set-parents(Wizard, Player);
 Wizard:initialize();
-Wizard.password = "wiz";
+Wizard.name = "Wizard";
 Wizard.is-programmer = true;
+
+define method (Wizard) @shutdown-verb(b) {
+  fork/quota(function () {
+    sleep(1);
+    checkpoint();
+    shutdown();
+  }, VM_STATE_NOQUOTA);
+}
+set-setuid(Wizard:@shutdown-verb, false);
+set-method-flags(Wizard:@shutdown-verb, O_OWNER_MASK);
+Wizard:add-verb(#this, #@shutdown-verb, ["@shutdown"]);
+
+define method (Wizard) @checkpoint-verb(b) {
+  checkpoint();
+  this:tell("Checkpoint done.\n");
+}
+set-setuid(Wizard:@checkpoint-verb, false);
+set-method-flags(Wizard:@checkpoint-verb, O_OWNER_MASK);
+Wizard:add-verb(#this, #@checkpoint-verb, ["@checkpoint"]);
+
+////////////////////////////////////////////////////////////////
+// VERBS ON Player
+
+define method (Player) look() {
+  as(Thing):look() + [ "(" + this.name + " is " +
+		     (if (this.awake)
+		       "awake";
+		     else
+		       "asleep") + ".)\n" ];
+}
+make-method-overridable(Player:look, true);
+
+define method (Player) room-look-verb(b) {
+  realuid():mtell(location(this):look());
+}
+Player:add-verb(#this, #room-look-verb, ["look"]);
+
+define method (Player) @setpass-verb(b) {
+  define pass = b[#pass][0];
+
+  realuid():tell(if (this:set-password(pass))
+		   "Password changed.\n";
+		 else
+		   "Password not changed (permission denied).\n");
+}
+set-setuid(Player:@setpass-verb, false);
+Player:add-verb(#this, #@setpass-verb, ["@setpass ", #pass]);
+
+define method (Player) @gender-verb(b) {
+  if (caller-effuid() != owner(this))
+    return;
+
+  define g = b[#gender][0];
+  define gs = as-sym(g);
+
+  if (Root.Genders[gs] == undefined)
+    realuid():tell("That gender is not defined, sorry.\n");
+  else {
+    this.gender = gs;
+    realuid():mtell(["Your gender is now set to ", gs, ".\n"]);
+  }
+}
+Player:add-verb(#this, #@gender-verb, ["@gender ", #gender]);
+
+define method (Player) get-verb(b) {
+  define o = b[#obj][1];
+
+  if (!o)
+    this:tell("There doesn't appear to be anything called \"" + b[#obj][0] + "\" here.\n");
+  else {
+    define oldloc = location(o);
+
+    if (oldloc == this) {
+      this:mtell(["You were already carrying ", o.name, ".\n"]);
+    } else if (o:moveto(this) == true) {
+      this:mtell(["You pick up ", o.name, ".\n"]);
+      oldloc:announce([this.name, " picks up ", o.name, ".\n"]);
+    } else {
+      this:mtell(["You fail to pick up ", o.name, ".\n"]);
+      oldloc:announce([this.name, " tries to pick up ", o.name, ", but fails.\n"]);
+    }
+  }
+}
+set-setuid(Player:get-verb, false);
+make-method-overridable(Player:get-verb, true);
+for-each(function (pattern) Player:add-verb(#this, #get-verb, pattern),
+	 [
+	  ["get ", #obj],
+	  ["pick up ", #obj],
+	  ["take ", #obj]
+	 ]);
+
+define method (Player) drop-verb(b) {
+  define o = b[#obj][1];
+
+  if (!o)
+    this:tell("You can't find anything called \"", b[#obj][0], "\" to drop.\n");
+  else {
+    if (!index-of(contents(this), o))
+      this:mtell(["You aren't holding ", o.name, ".\n"]);
+    else if (o:moveto(location(this)) == true) {
+      this:mtell(["You drop ", o.name, ".\n"]);
+      location(this):announce([this.name, " drops ", o.name, ".\n"]);
+    } else
+      this:mtell(["You find that you cannot drop ", o.name, " here.\n"]);
+  }
+}
+set-setuid(Player:drop-verb, false);
+make-method-overridable(Player:drop-verb, true);
+for-each(function (pattern) Player:add-verb(#this, #drop-verb, pattern),
+	 [
+	  ["drop ", #obj],
+	  ["put down ", #obj]
+	 ]);
+
+define method (Player) invent-verb(b) {
+  define s = ["You are holding:\n"];
+
+  if (length(contents(this)) == 0)
+    s = s + ["    nothing.\n"];
+  else
+    for-each(function (x) s = s + ["    " + x.name + "\n"], contents(this));
+
+  this:mtell(s);
+}
+make-method-overridable(Player:invent-verb, true);
+Player:add-verb(#this, #invent-verb, ["invent"]);
+Player:add-verb(#this, #invent-verb, ["inventory"]);
+
+define method (Player) @setlines-verb(b) {
+  if (caller-effuid() != owner(this))
+    return;
+
+  define l = as-num(b[#numlines][0]);
+
+  if (l > 0) {
+    this.screen-length = l;
+    realuid():tell("Your screen length is set to " + get-print-string(l) + ".\n");
+  } else {
+    this.screen-length = false;
+    realuid():tell("Page-at-a-time-mode has been switched off.\n");
+  }
+}
+make-method-overridable(Player:@setlines-verb, true);
+Player:add-verb(#this, #@setlines-verb, ["@setlines ", #numlines]);
+
+define method (Player) @sethome-verb(b) {
+  if (caller-effuid() != owner(this))
+    return;
+
+  define loc = b[#loc][1];
+  define player = realuid();
+
+  if (loc) {
+    if (!isa(loc, Room)) {
+      player:tell("That place isn't a room!\n");
+      return;
+    }
+
+    define function do-the-move() {
+      set-effuid(this);
+      this:moveto(loc);
+    }
+
+    if (do-the-move() == true) {
+      player:tell("You set your home to " + loc.name + ".\n");
+      this.home = loc;
+      return;
+    }
+  }
+
+  player:tell("You can't seem to set your home to that particular object.\n");
+}
+make-method-overridable(Player:@sethome-verb, true);
+Player:add-verb(#this, #@sethome-verb, ["@sethome ", #loc]);
+
+define method (Player) home-verb(b) {
+  if (caller-effuid() != owner(this))
+    return;
+
+  location(this):announce(this.name + " decides to go home.\n");
+  this:moveto(this.home);
+  location(this):announce(this.name + " arrives home.\n");
+}
+Player:add-verb(#this, #home-verb, ["home"]);
+
+define method (Player) @quit-verb(b) {
+  if (caller-effuid() != owner(this))
+    return;
+
+  close(this.connection);
+}
+Player:add-verb(#this, #@quit-verb, ["@quit"]);
+
+define method (Player) @build-verb(b) {
+  define pname = b[#parent-obj][0];
+  define pval = b[#parent-obj][1];
+  define oname = b[#new-name][0];
+  define ptell = realuid():tell;
+
+  if (!pval) {
+    pval = symbol-value(as-sym(pname));
+    if (type-of(pval) != #object) {
+      ptell("I don't recognise that name for a parent object, sorry.\n");
+      return false;
+    }
+  }
+
+  define obj = pval:clone();
+
+  if (type-of(obj) == #object) {
+    ptell("You created an object.\n");
+    if (obj:set-name(oname))
+      ptell("You named it \"" + oname + "\".\n");
+    else
+      ptell("You couldn't name it, for some reason.\n");
+  } else
+    ptell("You didn't create an object.\n");
+}
+set-setuid(Player:@build-verb, false);
+Player:add-verb(#this, #@build-verb, ["@build ", #parent-obj, " as ", #new-name]);
 
 checkpoint();
 shutdown();

@@ -209,6 +209,9 @@ PUBLIC int scan(SCANINST scaninst) {
 
 	ch = SCAN_PEEK();
 
+	if (ch == EOF)
+	  EMIT(SCAN_EOF);
+
 	if (!isspace(ch) && (strchr(scan_delims, ch) == NULL)) {
 	  SCAN_SHIFT();
 	  GO(ST_ID)
@@ -281,6 +284,9 @@ PUBLIC int scan(SCANINST scaninst) {
 	ch = SCAN_PEEK();
 
 	switch (ch) {
+	  case EOF:
+	    EMIT(SCAN_EOF)
+
 	  case '\\':
 	    SCAN_DROP();
 	    if (SCAN_PEEK() != '"') {

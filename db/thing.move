@@ -21,7 +21,7 @@ define method (Thing) initialize() {
   as(Root):initialize();
   this.verbs = [];
 }
-set-method-flags(Thing:initialize, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Thing:initialize, true);
 
 define method (Thing) add-alias(n) {
   if (caller-effuid() != owner(this) && !privileged?(caller-effuid()))
@@ -33,14 +33,12 @@ define method (Thing) add-alias(n) {
     this.aliases = this.aliases + [n];
   return true;
 }
-set-method-flags(Thing:add-alias, O_ALL_PERMS);
 
 define method (Thing) aliases() {
   (if (slot-clear?(this, #aliases)) []; else this.aliases) +
   (if (this == Thing) []; else
-    reduce(function (acc, par) acc + par:aliases(), this.aliases, parents(this)));
+    reduce(function (acc, par) acc + par:aliases(), [], parents(this)));
 }
-set-method-flags(Thing:aliases, O_ALL_PERMS);
 
 define method (Thing) add-verb(selfvar, methname, pattern) {
   define c = caller-effuid();
@@ -55,7 +53,6 @@ define method (Thing) add-verb(selfvar, methname, pattern) {
   } else
     false;
 }
-set-method-flags(Thing:add-verb, O_ALL_PERMS);
 
 define method (Thing) match-verb(sent) {
   define v = this.verbs;
@@ -131,9 +128,8 @@ define method (Thing) match-verb(sent) {
     false;
   }
 
-  (this != Thing && search-vec(parents(this))) || search-vec(contents(this));
+  (this != Thing && search-vec(parents(this)));
 }
-set-method-flags(Thing:match-verb, O_ALL_PERMS);
 
 define method (Thing) match-objects(match) {
   define bindings = match[2];
@@ -153,7 +149,6 @@ define method (Thing) match-objects(match) {
     i = i + 1;
   }
 }
-set-method-flags(Thing:match-objects, O_ALL_PERMS);
 
 define method (Thing) match-object(name) {
   if (equal?(name, this.name))
@@ -163,37 +158,37 @@ define method (Thing) match-object(name) {
   if (c != undefined)
     return this;
 
-  define c = find-by-name(contents(this), name);
+  c = find-by-name(contents(this), name);
   if (c != undefined)
     return c;
 
-  c = first-that(function (x) x:match-object(name), contents(this));
+  c = first-that(function (o) {
+		   first-that(function (x) equal?(x, name), o:aliases()) != undefined;
+		 }, contents(this));
   if (c != undefined)
     return c;
 
   return false;
 }
-set-method-flags(Thing:match-object, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Thing:match-object, true);
 
 define method (Thing) read() "";
-set-method-flags(Thing:read, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Thing:read, true);
 
 define method (Thing) mtell(vec) for-each(this:tell, vec);
-set-method-flags(Thing:mtell, O_ALL_PERMS);
 
 define method (Thing) tell(x) undefined;
-set-method-flags(Thing:tell, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Thing:tell, true);
 
 define method (Thing) listening?() false;
-set-method-flags(Thing:listening?, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Thing:listening?, true);
 
 define method (Thing) moveto(loc) {
   define caller = caller-effuid();
-
-  if (caller != owner(this))
-    return #no-permission;
-
   define oldloc = location(this);
+
+  if (caller != owner(this) && caller != owner(oldloc) && !privileged?(caller))
+    return #no-permission;
 
   if (oldloc != loc) {
     if (!this:pre-move(oldloc, loc) || !loc:pre-accept(this, oldloc))
@@ -208,22 +203,23 @@ define method (Thing) moveto(loc) {
   } else
     true;
 }
-set-method-flags(Thing:moveto, O_ALL_PERMS);
 
 define method (Thing) pre-move(oldloc, loc) true;
-set-method-flags(Thing:pre-move, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Thing:pre-move, true);
 
 define method (Thing) pre-accept(thing, from) false;
-set-method-flags(Thing:pre-accept, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Thing:pre-accept, true);
 
 define method (Thing) post-accept(thing, from) true;
-set-method-flags(Thing:post-accept, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Thing:post-accept, true);
 
 define method (Thing) post-move(oldloc, loc) true;
-set-method-flags(Thing:post-move, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Thing:post-move, true);
+
+define method (Thing) release(what, newloc) undefined;
+make-method-overridable(Thing:release, true);
 
 define method (Thing) description() copy-of(this.description);
-set-method-flags(Thing:description, O_ALL_PERMS);
 
 define method (Thing) set-description(d) {
   if (caller-effuid() != owner(this))
@@ -231,7 +227,14 @@ define method (Thing) set-description(d) {
 
   this.description = d;
 }
-set-method-flags(Thing:set-description, O_ALL_PERMS);
+
+define method (Thing) space() {
+  if (caller-effuid() != owner(this) && !privileged?(caller-effuid()))
+    return false;
+
+  move-to(this, null);
+  return true;
+}
 
 ////////////////////////////////////////////////////////////////////////////
 // VERBS
@@ -253,7 +256,6 @@ define method (Thing) setdesc-verb(b) {
   }
 }
 set-setuid(Thing:setdesc-verb, false);
-set-method-flags(Thing:setdesc-verb, O_ALL_PERMS);
 Thing:add-verb(#obj, #setdesc-verb, ["@describe ", #obj]);
 
 define method (Thing) @name-verb(b) {
@@ -266,7 +268,6 @@ define method (Thing) @name-verb(b) {
     player:tell("Permission denied.\n");
 }
 set-setuid(Thing:@name-verb, false);
-set-method-flags(Thing:@name-verb, O_ALL_PERMS);
 Thing:add-verb(#obj, #@name-verb, ["@name ", #obj, " as ", #name]);
 
 define method (Thing) @alias-verb(b) {
@@ -279,7 +280,6 @@ define method (Thing) @alias-verb(b) {
     player:tell("Permission denied.\n");
 }
 set-setuid(Thing:@alias-verb, false);
-set-method-flags(Thing:@alias-verb, O_ALL_PERMS);
 Thing:add-verb(#obj, #@alias-verb, ["@alias ", #obj, " as ", #name]);
 
 define method (Thing) look() {
@@ -289,14 +289,18 @@ define method (Thing) look() {
    make-string(length(this.name), "~") + "\n"
   ] + map(function (x) pronoun-sub(x, this), this:description());
 }
+make-method-overridable(Thing:look, true);
 
 define method (Thing) look-verb(bindings) {
   realuid():mtell(this:look());
 }
 Thing:add-verb(#obj, #look-verb, ["look ", #obj]);
+Thing:add-verb(#obj, #look-verb, ["look at ", #obj]);
 
 define method (Thing) examine() {
   define s = this.name + " (owned by " + owner(this).name + ")\n";
+
+  s = s + "Location: " + get-print-string(location(this)) + "\n";
 
   {
     define al = this:aliases();
@@ -330,35 +334,38 @@ define method (Thing) examine() {
 
   s;
 }
-set-method-flags(Thing:examine, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Thing:examine, true);
 
 define method (Thing) @examine-verb(b) {
   realuid():tell(this:examine());
 }
-set-method-flags(Thing:examine, O_ALL_PERMS);
 Thing:add-verb(#obj, #@examine-verb, ["@examine ", #obj]);
 
 define method (Thing) @who-verb(b) {
   define p = realuid();
   p:tell("Currently connected players:\n");
 
-  for-each(function (pl) p:tell("\t" + pl.name + " is in " + location(pl).name + ".\n"),
-	   Login.active-players);
+  lock(Login);
+  define ap = Login.active-players;
+  unlock(Login);
+
+  for-each(function (pl) p:tell("\t" + pl.name + " is in " + location(pl).name + ".\n"), ap);
 }
-set-method-flags(Thing:@who-verb, O_ALL_PERMS);
 Thing:add-verb(#this, #@who-verb, ["@who"]);
 
 define method (Thing) @verbs-verb(b) {
-  define p = realuid();
-
-  p:tell("Verbs defined on " + this.name + " and it's parents:\n");
+  define vbs = ["Verbs defined on " + this.name + " and it's parents:\n"];
 
   define function tellverbs(x) {
     for-each(function (v) {
-      p:tell("\t" + get-print-string(v[2]) + ": " +
-	     reduce(function (acc, e) acc + (if (type-of(e) == #symbol)
-					     "<" + get-print-string(e) + ">";
-					     else e), "", v[0]) + "\n");
+      vbs = vbs + [
+		   "\t" +				// get-print-string(v[2]) + ": " +
+		   reduce(function (acc, e) acc + (if (type-of(e) == #symbol)
+						   "<" + get-print-string(e) + ">";
+						   else e),
+			  "",
+			  v[0]) +
+		   "\n"];
     }, x.verbs);
 
     if (x != Thing)
@@ -366,9 +373,18 @@ define method (Thing) @verbs-verb(b) {
   }
 
   tellverbs(this);
+  realuid():mtell(vbs);
 }
-set-method-flags(Thing:@verbs-verb, O_ALL_PERMS);
 Thing:add-verb(#obj, #@verbs-verb, ["@verbs ", #obj]);
+
+define method (Thing) @space-verb(b) {
+  if (this:space())
+    realuid():tell("You have @spaced " + get-print-string(this) + ".\n");
+  else
+    realuid():tell("You have no permission to @space that object.\n");
+}
+set-setuid(Thing:@space-verb, false);
+Thing:add-verb(#obj, #@space-verb, ["@space ", #obj]);
 
 checkpoint();
 shutdown();

@@ -211,7 +211,9 @@ PRIVATE void import_db(char *filename) {
   if (f == NULL)
     return;
 
+  gc_inc_safepoints();
   vm_restore_from(f);
+  gc_dec_safepoints();
   fclose(f);
 }
 
@@ -268,11 +270,14 @@ PUBLIC int main(int argc, char *argv[]) {
 
   checkpoint_filename = "move.checkpoint";
 
+  install_primitives();
+
   pthread_create(&gc_thread, NULL, vm_gc_thread_main, NULL);
   pthread_create(&finalizer_thread, NULL, finalizer, NULL);
 
   import_db(argv[1]);
-  install_primitives();
+
+  bind_primitives_to_symbols();
 
   import_cmdline_files(argc - 2, argv + 2);
 

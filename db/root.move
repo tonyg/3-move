@@ -35,6 +35,15 @@ set-object-flags(Wizard, O_OWNER_MASK);	// wizard is a very private individual.
 define (Root) name = "The Root Object";
 set-slot-flags(Root, #name, O_ALL_R);
 
+define function make-method-overridable(meth, val) {
+  define fl = method-flags(meth);
+  if (val)
+    fl = fl | O_C_FLAG;
+  else
+    fl = fl & ~O_C_FLAG;
+  set-method-flags(meth, fl);
+}
+
 define method (Root) set-name(n) {
   define c = caller-effuid();
 
@@ -43,7 +52,6 @@ define method (Root) set-name(n) {
   else
     false;
 }
-set-method-flags(Root:set-name, O_ALL_PERMS);
 
 Wizard:set-name("Wizard");
 
@@ -56,16 +64,17 @@ move-to(Wizard, null);
 
   define method (Root) clone() {
     define n = real-clone(this);
-    if (n)
+    if (n) {
+      set-object-flags(n, O_NORMAL_FLAGS);
       n:initialize();
+    }
     n;
   }
   set-setuid(Root:clone, false);
-  set-method-flags(Root:clone, O_ALL_PERMS);
 }
 
 define method (Root) initialize() true;
-set-method-flags(Root:initialize, O_ALL_PERMS | O_C_FLAG);
+make-method-overridable(Root:initialize, true);
 
 define function all-methods(obj) {
   define p = parents(obj);
@@ -79,7 +88,13 @@ define function all-methods(obj) {
 
   return methods(obj) + result;
 }
-set-setuid(all-methods, false);
+
+define (Root) Genders = make-hashtable(23);
+set-slot-flags(Root, #Genders, O_OWNER_MASK);
+
+Root.Genders[#neuter] = ["it", "it", "its", "it's", "itself"];
+Root.Genders[#male] = ["he", "him", "his", "his", "himself"];
+Root.Genders[#female] = ["she", "her", "her", "hers", "herself"];
 
 checkpoint();
 shutdown();

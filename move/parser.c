@@ -1177,8 +1177,12 @@ PRIVATE int expr_parse(CODE code) {
 
     add_scope(code);
 
+    CHKERR('(', "brackets surround IDENT in bind-cc");
+    DROP();
     CHKERR(IDENT, "IDENT required in bind-cc");
     add_binding(code, (OVECTOR) yylval);
+    DROP();
+    CHKERR(')', "brackets surround IDENT in bind-cc");
     DROP();
 
     template = compile_template(code, 1);

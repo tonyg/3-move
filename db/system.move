@@ -13,8 +13,6 @@ define function map(f, x) {
 
   return v;
 }
-set-setuid(map, false);
-set-method-flags(map, O_ALL_PERMS);
 
 define function for-each(f, x) {
   define i = 0;
@@ -24,8 +22,6 @@ define function for-each(f, x) {
     i = i + 1;
   }
 }
-set-setuid(for-each, false);
-set-method-flags(for-each, O_ALL_PERMS);
 
 define function first-that(f, x) {
   define i = 0;
@@ -38,8 +34,6 @@ define function first-that(f, x) {
 
   return undefined;
 }
-set-setuid(first-that, false);
-set-method-flags(first-that, O_ALL_PERMS);
 
 define function reduce(f, st, vec) {
   define i = 0;
@@ -51,16 +45,11 @@ define function reduce(f, st, vec) {
 
   st;
 }
-set-setuid(reduce, false);
-set-method-flags(reduce, O_ALL_PERMS);
 
 define function find-by-name(vec, name)
      first-that(function (x) equal?(x.name, name), vec);
-set-setuid(find-by-name, false);
-set-method-flags(find-by-name, O_ALL_PERMS);
 
 define function valid(obj) type-of(obj) == #object;
-set-method-flags(valid, O_ALL_PERMS);
 
 define function pronoun-sub(str, who) {
   define function cap(s) toupper(s[0]) + section(s, 1, length(s) - 1);
@@ -76,22 +65,21 @@ define function pronoun-sub(str, who) {
     }
 
     if (has-slot(who, #gender)) {
-      define g = who.gender;
+      define g = Root.Genders[who.gender];
       define gn = ["%s", "%o", "%p", "%q", "%r"];
       define i = 0;
 
-      while (i < length(g)) {
-	str = substring-replace(str, gn[i], g[i]);
-	str = substring-replace(str, toupper(gn[i]), toupper(g[i]));
-	i = i + 1;
-      }
+      if (g != undefined)
+	while (i < length(g)) {
+	  str = substring-replace(str, gn[i], g[i]);
+	  str = substring-replace(str, toupper(gn[i]), cap(g[i]));
+	  i = i + 1;
+	}
     }
   }
 
   str;
 }
-set-setuid(pronoun-sub, false);
-set-method-flags(pronoun-sub, O_ALL_PERMS);
 
 // editor(text)
 //
@@ -108,7 +96,7 @@ define function editor(text) {
   while (true) {
     define i = p:read();
 
-    while (!equal?(i[0], ".")) {
+    while (!(length(i) > 0 && equal?(i[0], "."))) {
       if (inspos > length(res))
 	res = res + [i + "\n"];
       else
@@ -142,12 +130,16 @@ define function editor(text) {
       if (l < 1 || l > length(res))
 	p:tell("That line number is invalid.\n");
       else if (ixo) {
-	define t = as-num(section(nums, ixo + 1, length(nums) - ixo - 1));
+	define num2len = length(nums) - ixo - 1;
+	define t = length(res);
+
+	if (num2len > 0)
+	  t = as-num(section(nums, ixo + 1, num2len));
 
 	if (t < l || t > length(res))
 	  p:tell("That line number is invalid.\n");
 	else
-	  res = section(res, 0, l - 1) + section(res, t, length(res) - l);
+	  res = section(res, 0, l - 1) + section(res, t, length(res) - t);
       } else
 	res = section(res, 0, l - 1) + section(res, l, length(res) - l);
     } else if (equal?(i[1], "l")) {
@@ -164,8 +156,28 @@ define function editor(text) {
       p:tell("Syntax error. .? is for help.\n");
   }
 }
-set-setuid(editor, false);
-set-method-flags(editor, O_ALL_PERMS);
+
+define function make-sentence(vec) {
+  define i = 0;
+  define l = length(vec) - 1;
+  define sent = "";
+  define function onm(x) if (type-of(x) == #object) x.name; else get-print-string(x);
+
+  while (i < l) {
+    if (i != (l - 1))
+      sent = sent + onm(vec[i]) + ", ";
+    else
+      sent = sent + onm(vec[i]) + " ";
+    i = i + 1;
+  }
+
+  if (l > 0) sent + "and " + onm(vec[l]); else onm(vec[l]);
+}
+
+define function object-named(name) {
+  define player = realuid();
+  player:match-object(name) || location(player):match-object(name);
+}
 
 checkpoint();
 shutdown();

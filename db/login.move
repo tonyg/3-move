@@ -9,9 +9,9 @@ set-object-flags(Login, O_OWNER_MASK);
 Login:set-name("The Login Object");
 move-to(Login, null);
 
-define (Login) players = [Wizard];
+define (Login) players = [];
 define (Login) active-players = [];
-set-slot-flags(Login, #players, O_ALL_R | O_OWNER_MASK);
+set-slot-flags(Login, #players, O_OWNER_MASK);
 set-slot-flags(Login, #active-players, O_OWNER_MASK);
 
 define (Login) login-message =
@@ -41,8 +41,6 @@ set-slot-flags(Login, #motd, O_ALL_R);
     else
       real-GPS(x);
   }
-  set-setuid(get-print-string, false);
-  set-method-flags(get-print-string, O_ALL_PERMS);
 }
 
 define function do-login(conn) {
@@ -55,7 +53,9 @@ define function do-login(conn) {
     print-on(conn, "Password: ");
     define lpass = read-from(conn);
 
+    lock(Login);
     define player = find-by-name(Login.players, lname);
+    unlock(Login);
 
     if (player == undefined) {
       print-on(conn, "\nUnknown player or incorrect password.\n\n");
@@ -79,11 +79,25 @@ define function do-login(conn) {
 
   return false;
 }
+set-method-flags(do-login, O_OWNER_MASK);
 
 define function match-verb(player, sent) {
+  define function match-contents-of(x) {
+    define res;
+    define ob = first-that(function (co) res = co:match-verb(sent), contents(x));
+    if (ob != undefined)
+      return res;
+    else
+      return false;
+  }
+
   set-effuid(player);
-  player:match-verb(sent) || location(player):match-verb(sent);
+  player:match-verb(sent) ||
+	  match-contents-of(player) ||
+	  location(player):match-verb(sent) ||
+	  match-contents-of(location(player));
 }
+set-method-flags(match-verb, O_OWNER_MASK);
 
 define function match-objects(player, match) {
   set-effuid(player);
@@ -99,6 +113,7 @@ define function match-objects(player, match) {
       bindings[key] = [v, false];
   }, all-keys(bindings));
 }
+set-method-flags(match-objects, O_OWNER_MASK);
 
 define function do-mud-command(player, sent) {	// sent is the Sentence (string).
   if (equal?(sent, ""))		// "understands" the null sentence.
@@ -158,16 +173,18 @@ define function do-mud-command(player, sent) {	// sent is the Sentence (string).
   } else
     #no-matches-found;
 }
+set-method-flags(do-mud-command, O_OWNER_MASK);
 
 define function repl-thread-main(sock) {
-  set-connections(sock, sock);
-  set-thread-quota(current-thread(), VM_STATE_DAEMON);
+  // set-connections(sock, sock);
 
   set-realuid(Wizard);
   set-effuid(Wizard);
 
   define abort = null;
-  set-exception-handler(function (excp, arg, vms, acc) {
+  define function excp-handler(excp, arg, vms, acc) {
+    if (type-of(arg) == #vector)
+      arg = map(get-print-string, arg);
     realuid():mtell([
 		     "EXCEPTION:\n",
 		     "  key: ", excp, "\n",
@@ -176,7 +193,9 @@ define function repl-thread-main(sock) {
 		     "Aborting to toplevel repl.\n"
     ]);
     abort();
-  });
+  }
+  set-setuid(excp-handler, true);
+  set-exception-handler(excp-handler);
   define function make-abort-return-here() {
     call/cc(function (cc) {
       abort = function () cc(undefined);
@@ -195,6 +214,31 @@ define function repl-thread-main(sock) {
   player.awake = true;
   player.connection = sock;
 
+  define function do-mud-command-shell(p, s) {
+    do-mud-command(p, s);
+  }
+  set-setuid(do-mud-command-shell, true);	// a-ha!
+
+  define function logout-shell() {
+    lock(Login);
+    {
+      define i = index-of(Login.active-players, player);
+      if (i)
+	Login.active-players = delete(Login.active-players, i, 1);
+    }
+    unlock(Login);
+
+    player.awake = false;
+    player.connection = null;
+
+    call/cc(function (cc) {
+      abort = function () cc(undefined);
+      set-effuid(player);
+      player:disconnect-function();
+    });
+  }
+  set-setuid(logout-shell, true);	// a-ha also!
+
   set-realuid(player);
   set-effuid(player);
 
@@ -205,29 +249,16 @@ define function repl-thread-main(sock) {
     define sent = read-from(sock);
 
     if (!closed?(sock)) {
-      if (do-mud-command(player, sent) != true)
+      if (do-mud-command-shell(player, sent) != true)
         player:tell("I don't understand that.\n");
       else
 	player:tell("\n");
     }
   }
 
-  lock(Login);
-  {
-    define i = index-of(Login.active-players, player);
-    if (i)
-      Login.active-players = delete(Login.active-players, i, 1);
-  }
-  unlock(Login);
-
-  player.awake = false;
-  player.connection = null;
-
-  call/cc(function (cc) {
-    abort = function () cc(undefined);
-    player:disconnect-function();
-  });
+  logout-shell();
 }
+set-method-flags(repl-thread-main, O_OWNER_MASK);
 
 define function listener-thread-main() {
   define port = 7777;
@@ -240,17 +271,18 @@ define function listener-thread-main() {
 
   while (true) {
     define sock = accept-connection(server);
-    fork(function () repl-thread-main(sock));
+    fork/quota(function () repl-thread-main(sock), VM_STATE_DAEMON);
   }
 }
+set-method-flags(listener-thread-main, O_OWNER_MASK);
 
 define VM_STATE_DAEMON = -1;	// run forever, checkpoint
 define VM_STATE_NOQUOTA = -2;	// run forever, don't save
 
 define function start-listening() {
-  define l = fork(listener-thread-main);
-  set-thread-quota(l, VM_STATE_NOQUOTA);
+  fork/quota(listener-thread-main, VM_STATE_NOQUOTA);
 }
+set-method-flags(start-listening, O_OWNER_MASK);
 
 start-listening();
 

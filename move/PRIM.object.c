@@ -525,9 +525,6 @@ DEFPRIM(contentsFun) {
 
   TYPEERRIF(!OBJECTP(x));
 
-  if (!(vms->r->vm_effuid != ((OBJECT) x)->owner || PRIVILEGEDP(vms->r->vm_effuid)))
-    return false;
-
   LOCK((OBJECT) x);
   result = list_to_vector(((OBJECT) x)->contents);
   UNLOCK((OBJECT) x);
