@@ -120,7 +120,8 @@ define function do-login(conn) {
     }
 
     lock(Login);
-    define player =
+    define player = undefined;
+    if (lname) {
       if (equal?(lname, "Guest")) {
 	define g = first-that(function (g) !g.awake, Login.guests);
 	if (g == undefined)
@@ -129,9 +130,10 @@ define function do-login(conn) {
 		   "All guest characters are in use at the moment.\n"
 		   "Try again later.\n"
 		   );
-	g;
+	player = g;
       } else
-	find-by-name(Login.players, lname);
+	player = find-by-name(Login.players, lname);
+    }
     unlock(Login);
 
     if (player == undefined) {
@@ -298,6 +300,8 @@ define function repl-thread-main(sock) {
     set-thread-quota(current-thread(), VM_STATE_DAEMON); // jic we ate all our quota.
     if (excp == #die)
       return;	// kills the thread.
+    if (excp == #quota-expired)
+      set-exception-handler(excp-handler);
     if (type-of(arg) == #vector)
       arg = map(get-print-string, arg);
     realuid():mtell([
