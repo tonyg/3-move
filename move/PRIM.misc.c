@@ -38,6 +38,7 @@ DEFPRIM(timeStringFun) {
 
   val = UNUM(n);
   s = ctime(&val);
+  s[strlen(s)-1] = '\0'; /* chop the trailing newline */
   return (OBJ) newstring(s);
 }
 
@@ -126,9 +127,18 @@ DEFPRIM(asNumFun) {
 
   if (BVECTORP(x)) {
     char buf[1024];
+    char *endptr;
+    long val;
+
     memcpy(buf, ((BVECTOR) x)->vec, x->length);
     buf[x->length] = '\0';
-    return MKNUM(atol(buf));
+
+    val = strtol(buf, &endptr, 0);
+
+    if (endptr == buf)
+      return false;
+    else
+      return MKNUM(val);
   }
 
   return undefined;
