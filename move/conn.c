@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 
 #include <sys/time.h>
 #include <sys/types.h>
@@ -240,7 +241,7 @@ PUBLIC void fill_scaninst(SCANINST si, OVECTOR conn) {
       break;
 
     default:
-      fprintf(stderr, "connection %p had funny type %d\n", conn, NUM(AT(conn, CO_TYPE)));
+      fprintf(stderr, "connection %p had funny type %d\n", conn, (int) NUM(AT(conn, CO_TYPE)));
       exit(MOVE_EXIT_MEMORY_ODDNESS);
   }
 }
