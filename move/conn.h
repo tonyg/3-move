@@ -2,6 +2,7 @@
 #define Conn_H
 
 extern OVECTOR newfileconn(int fd);
+extern OVECTOR newfileconn_blocking(int fd);
 extern OVECTOR newstringconn(BVECTOR data);
 
 extern char *conn_gets(char *s, int size, OVECTOR conn);
