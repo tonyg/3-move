@@ -70,6 +70,10 @@ void barrier_hit(struct barrier *barrier) {
 #endif
 }
 
+#if 0
+/**************************************************************************/
+/* NOONE USES THIS FUNCTION SO IT'S #if'ed OUT! */
+/**************************************************************************/
 int barrier_set_threshold(struct barrier *barrier, int threshold) {
   int old;
 
@@ -93,6 +97,8 @@ int barrier_set_threshold(struct barrier *barrier, int threshold) {
 
   return old;
 }
+/**************************************************************************/
+#endif
 
 void barrier_inc_threshold(struct barrier *barrier) {
   pthread_mutex_lock(&barrier->mutex);
