@@ -193,6 +193,8 @@ define function repl-thread-main(sock) {
   define abort = null;
   define function excp-handler(excp, arg, vms, acc) {
     set-thread-quota(current-thread(), VM_STATE_DAEMON); // jic we ate all our quota.
+    if (excp == #die)
+      return;	// kills the thread.
     if (type-of(arg) == #vector)
       arg = map(get-print-string, arg);
     realuid():mtell([
