@@ -166,7 +166,12 @@ DEFPRIM(openConnection) {
     return (OBJ) newsym("host-not-found");
 
   addr.sin_family = AF_INET;
-  (long) addr.sin_addr.s_addr = * (long *) he->h_addr;
+
+  /* Note: this used to use (long). It didn't work on the Alpha.
+     It may not work on all systems. I'm unsure as to the most portable
+     solution here. */
+  (unsigned int) addr.sin_addr.s_addr = * (unsigned int *) he->h_addr;
+
   addr.sin_port = htons(NUM(port));
 
   if (connect(sock, (struct sockaddr *) &addr, sizeof(addr)) == -1)
