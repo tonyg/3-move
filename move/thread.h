@@ -5,8 +5,9 @@
 #define BLOCK_CTXT_READLINE		1	/* blocked reading a line -
 						   context is vector with:
 						   0	BVECTOR	buffer
-						   1	number	size
-						   2	OVECTOR	connection
+						   1	number	offset
+						   2	number	size
+						   3	OVECTOR	connection
 						   */
 #define BLOCK_CTXT_ACCEPT		2	/* blocked accepting a TCP connection -
 						   context is:

@@ -336,7 +336,7 @@ PUBLIC void block_until_event(void) {
 
     switch (thr->contextkind) {
       case BLOCK_CTXT_READLINE:
-	conn = (OVECTOR) AT((VECTOR) thr->context, 2);
+	conn = (OVECTOR) AT((VECTOR) thr->context, 3);
 	break;
 
       case BLOCK_CTXT_ACCEPT:

@@ -108,13 +108,14 @@ DEFPRIM(printOn) {
 DEFPRIM(readFrom) {
   OBJ conn = ARG(0);
   BVECTOR buf = newbvector_noinit(1024);	/* a long line! */
-  VECTOR args = newvector_noinit(3);
+  VECTOR args = newvector_noinit(4);
 
   TYPEERRIF(!OVECTORP(conn) || ((OVECTOR) conn)->type != T_CONNECTION);
 
   ATPUT(args, 0, (OBJ) buf);
-  ATPUT(args, 1, MKNUM(1024));
-  ATPUT(args, 2, (OBJ) conn);
+  ATPUT(args, 1, MKNUM(0));
+  ATPUT(args, 2, MKNUM(1024));
+  ATPUT(args, 3, (OBJ) conn);
 
   switch (conn_resume_readline(args)) {
     case CONN_RET_BLOCK:

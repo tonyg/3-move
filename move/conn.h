@@ -7,8 +7,6 @@ extern OVECTOR newstringconn(BVECTOR data);
 #define CONN_RET_ERROR		-1	/* EOF or normal error-with-errno */
 #define CONN_RET_BLOCK		-2	/* thread blocked, yield asap */
 
-extern int conn_gets(BVECTOR buf, int size, OVECTOR conn);
-
 extern int conn_write(const char *buf, int size, OVECTOR conn);
 extern int conn_puts(const char *s, OVECTOR conn);
 

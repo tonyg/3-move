@@ -135,8 +135,8 @@ PRIVATE int nullconn_getter(void *arg) {
 			      fileconn_getter(conn) : \
 			      CONN_RET_ERROR)
 
-PUBLIC int conn_gets(BVECTOR buf, int size, OVECTOR conn) {
-  char *s = buf->vec;
+PRIVATE int conn_gets(BVECTOR buf, int offs, int size, OVECTOR conn) {
+  char *s = buf->vec + offs;
   int c;
 
   if (conn_closed(conn))
@@ -153,10 +153,11 @@ PUBLIC int conn_gets(BVECTOR buf, int size, OVECTOR conn) {
 	return CONN_RET_ERROR;
 
       case CONN_RET_BLOCK: {
-	VECTOR args = newvector_noinit(3);
+	VECTOR args = newvector_noinit(4);
 	ATPUT(args, 0, (OBJ) buf);
-	ATPUT(args, 1, MKNUM(size));
-	ATPUT(args, 2, (OBJ) conn);
+	ATPUT(args, 1, MKNUM(offs));
+	ATPUT(args, 2, MKNUM(size));
+	ATPUT(args, 3, (OBJ) conn);
 	block_thread(BLOCK_CTXT_READLINE, (OBJ) args);
 	return CONN_RET_BLOCK;
       }
@@ -178,6 +179,7 @@ PUBLIC int conn_gets(BVECTOR buf, int size, OVECTOR conn) {
     *s = c;
     s++;
     size--;
+    offs++;
   }
 
   *s = '\0';
@@ -244,7 +246,10 @@ PUBLIC void fill_scaninst(SCANINST si, OVECTOR conn) {
 }
 
 PUBLIC int conn_resume_readline(VECTOR args) {
-  int retval = conn_gets((BVECTOR) AT(args, 0), NUM(AT(args, 1)), (OVECTOR) AT(args, 2));
+  int retval = conn_gets((BVECTOR) AT(args, 0),
+			 NUM(AT(args, 1)),
+			 NUM(AT(args, 2)),
+			 (OVECTOR) AT(args, 3));
 
   switch (retval) {
     case CONN_RET_BLOCK:
