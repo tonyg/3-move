@@ -1,0 +1,10 @@
+if [ -e move.pid ]
+then
+	kill `cat move.pid`
+	rm -f move.pid
+fi
+if [ -e checkpoint-cleanup.pid ]
+then
+	kill `cat checkpoint-cleanup.pid`
+	rm -f checkpoint-cleanup.pid
+fi

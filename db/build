@@ -1,0 +1,25 @@
+make -C ../move all
+
+if [ -e db ]
+then
+	echo Database exists, backing up as db.PREBUILD
+	cp db db.PREBUILD
+fi
+
+if [ -e move.pid ]
+then
+	mv move.pid move.pid.tmp
+fi
+
+for d in `cat order`
+do
+	echo "Adding $d..."
+	go $d >/dev/null
+	ls -l db
+done
+
+rm move.pid
+if [ -e move.pid.tmp ]
+then
+	mv move.pid.tmp move.pid
+fi

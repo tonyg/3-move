@@ -1,0 +1,2 @@
+mv db db.old >/dev/null
+mv move.checkpoint.$1 db && rm move.*

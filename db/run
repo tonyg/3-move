@@ -1,0 +1,2 @@
+./move db $* restart.move >/dev/null 2>&1 &
+../tricks/checkpoint-cleanup move.checkpoint. 300 6 &
