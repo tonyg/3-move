@@ -472,6 +472,9 @@ PUBLIC void load_restartable_threads(void *phandle, FILE *f) {
       printf("(vm_state is %d)\n", vms->c.vm_state);
       */
 
+    if (vms->r->vm_acc == yield_thread)
+      vms->r->vm_acc = undefined;
+
     real_begin_thread(i, NULL, vms, 0);
   }
 }
