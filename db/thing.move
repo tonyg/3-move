@@ -2,7 +2,7 @@
 set-realuid(Wizard);
 set-effuid(Wizard);
 
-define Thing = Root:clone();
+clone-if-undefined(#Thing, Root);
 set-object-flags(Thing, O_NORMAL_FLAGS | O_C_FLAG);
 
 Thing:set-name("Generic Thing");
@@ -48,7 +48,14 @@ define method (Thing) add-verb(selfvar, methname, pattern) {
       ((fl & O_GROUP_W == O_GROUP_W) && in-group-of(c, this)) ||
       ((fl & O_OWNER_W == O_OWNER_W) && c == owner(this)) ||
       privileged?(c)) {
-    this.verbs = this.verbs + [[pattern, selfvar, methname]];
+    define vb = first-that(function (v) {
+      v[2] == methname && v[1] == selfvar && vector-equal?(v[0], pattern);
+    }, this.verbs);
+    if (vb == undefined)
+      this.verbs = this.verbs + [[pattern, selfvar, methname]];
+    else {
+      vb[0] = pattern;
+    }
     true;
   } else
     false;
@@ -72,7 +79,7 @@ define method (Thing) match-verb(sent) {
       define thiselt = pat[idx];
 
       if (type-of(thiselt) == #symbol) {
-	if (idx + 1 == patlen && length(rsent) > 0) {
+	if (idx + 1 == patlen) {
 	  bindings[thiselt] = rsent;
 	  return true;
 	}
@@ -83,7 +90,7 @@ define method (Thing) match-verb(sent) {
 	  return false;
 
 	define nel = length(nextelt);
-	define loc = substring-search(rsent, nextelt);
+	define loc = substring-search-ci(rsent, nextelt);
 
 	if (!loc)
 	  return false;
@@ -91,7 +98,7 @@ define method (Thing) match-verb(sent) {
 	bindings[thiselt] = section(rsent, 0, loc);
 	return accumulate-matches(section(rsent, loc + nel, length(rsent) - (loc + nel)), idx + 2);
       } else if (type-of(thiselt) == #string) {
-	if (substring-search(rsent, thiselt) != 0)
+	if (substring-search-ci(rsent, thiselt) != 0)
 	  return false;
 
 	define tel = length(thiselt);
@@ -175,13 +182,21 @@ make-method-overridable(Thing:match-object, true);
 define method (Thing) read() "";
 make-method-overridable(Thing:read, true);
 
-define method (Thing) mtell(vec) for-each(this:tell, vec);
+define method (Thing) mtell(vec) {
+  if (type-of(vec) == #vector)
+    for-each(this:tell, vec);
+  else
+    this:tell(vec);
+}
 
 define method (Thing) tell(x) undefined;
 make-method-overridable(Thing:tell, true);
 
 define method (Thing) listening?() false;
 make-method-overridable(Thing:listening?, true);
+
+define method (Thing) locked-for?(x) false;
+make-method-overridable(Thing:locked-for?, true);
 
 define method (Thing) moveto(loc) {
   define caller = caller-effuid();
@@ -220,6 +235,7 @@ define method (Thing) release(what, newloc) undefined;
 make-method-overridable(Thing:release, true);
 
 define method (Thing) description() copy-of(this.description);
+make-method-overridable(Thing:description, true);
 
 define method (Thing) set-description(d) {
   if (caller-effuid() != owner(this))
@@ -242,17 +258,23 @@ define method (Thing) space() {
 define method (Thing) setdesc-verb(b) {
   define d = this:description();
   define player = realuid();
-  player:mtell(["Editing description of ", this, ".\n"]);
-  define e = editor(d);
+  define ptell = player:tell;
 
-  if (e == d)
-    player:tell("Edit aborted.\n");
+  if (effuid() != owner(this))
+    ptell("You don't own that object, so you are not allowed to describe it...\n");
   else {
-    player:tell("Setting description...\n");
-    if (this:set-description(e) == #no-permission)
-      player:tell("Permission denied.\n");
-    else
-      player:tell("Successful.\n");
+    player:mtell(["Editing description of ", this, ".\n"]);
+    define e = editor(d);
+
+    if (e == d)
+      ptell("Edit aborted.\n");
+    else {
+      ptell("Setting description...\n");
+      if (this:set-description(e) == #no-permission)
+	ptell("Failed to set the description.\n");
+      else
+	ptell("Description set.\n");
+    }
   }
 }
 set-setuid(Thing:setdesc-verb, false);
@@ -328,9 +350,10 @@ define method (Thing) examine() {
       s = s + "Location: " + l.name + "\n";
   }
 
-  s = s + "Methods: " + get-print-string(methods(this)) + "\n";
-  s = s + "Slots: " + get-print-string(slots(this)) + "\n";
-  s = s + "Verbs: " + get-print-string(map(function (v) v[2], this.verbs)) + "\n";
+  s = s + "Methods: " + string-wrap-string(get-print-string(methods(this)), 0) + "\n";
+  s = s + "Slots: " + string-wrap-string(get-print-string(slots(this)), 0) + "\n";
+  s = s + "Verbs: " + string-wrap-string(get-print-string(map(function (v) v[2], this.verbs)),
+					 0) + "\n";
 
   s;
 }
@@ -357,6 +380,7 @@ define method (Thing) @verbs-verb(b) {
   define vbs = ["Verbs defined on " + this.name + " and it's parents:\n"];
 
   define function tellverbs(x) {
+    vbs = vbs + ["  (" + x.name + ")\n"];
     for-each(function (v) {
       vbs = vbs + [
 		   "\t" +				// get-print-string(v[2]) + ": " +

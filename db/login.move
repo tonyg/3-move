@@ -2,17 +2,24 @@
 set-realuid(Wizard);
 set-effuid(Wizard);
 
-define Login = Root:clone();
+if (Login == undefined)
+  define Login = Root:clone();
+else
+  strip-object-methods(Login);
 set-owner(Login, Wizard);
 set-object-flags(Login, O_OWNER_MASK);
 
 Login:set-name("The Login Object");
 move-to(Login, null);
 
-define (Login) players = [];
-define (Login) active-players = [];
-set-slot-flags(Login, #players, O_OWNER_MASK);
-set-slot-flags(Login, #active-players, O_OWNER_MASK);
+{
+  if (!has-slot(Login, #players))
+    define (Login) players = [];
+  if (!has-slot(Login, #active-players))
+    define (Login) active-players = [];
+  set-slot-flags(Login, #players, O_OWNER_MASK);
+  set-slot-flags(Login, #active-players, O_OWNER_MASK);
+}
 
 define (Login) login-message =
 "\n"
@@ -34,12 +41,14 @@ define (Login) motd =
 set-slot-flags(Login, #motd, O_ALL_R);
 
 {
-  define real-GPS = get-print-string;
-  get-print-string = function (x) {
-    if (type-of(x) == #object)
-      "#<object " + x.name + ">";
-    else
-      real-GPS(x);
+  if (type-of(get-print-string != #closure)) {
+    define real-GPS = get-print-string;
+    get-print-string = function (x) {
+      if (type-of(x) == #object)
+	"#<object " + x.name + ">";
+      else
+	real-GPS(x);
+    }
   }
 }
 

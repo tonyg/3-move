@@ -2,7 +2,7 @@
 set-realuid(Wizard);
 set-effuid(Wizard);
 
-define Exit = Thing:clone();
+clone-if-undefined(#Exit, Thing);
 set-object-flags(Exit, O_NORMAL_FLAGS | O_C_FLAG);
 
 Exit:set-name("Generic Exit");
@@ -41,9 +41,6 @@ define method (Exit) dig(named, source, dest) {
 }
 set-setuid(Exit:dig, false);
 make-method-overridable(Exit:dig, true);
-
-define method (Exit) locked-for?(x) false;
-make-method-overridable(Exit:locked-for?, true);
 
 define method (Exit) set-dest(d) {
   if (caller-effuid() != owner(this) && !privileged?(caller-effuid()))
@@ -135,6 +132,12 @@ define method (Exit) @editmsg-verb(b) {
 }
 make-method-overridable(Exit:@editmsg-verb, true);
 Exit:add-verb(#this, #@editmsg-verb, ["@editmsg ", #msgname]);
+
+define method (Exit) go-verb(b) {
+  this:transport(realuid());
+}
+set-setuid(Exit:go-verb, false);
+Exit:add-verb(#exit, #go-verb, ["go ", #exit]);
 
 checkpoint();
 shutdown();

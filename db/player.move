@@ -2,7 +2,7 @@
 set-realuid(Wizard);
 set-effuid(Wizard);
 
-define Player = Thing:clone();
+clone-if-undefined(#Player, Thing);
 set-object-flags(Player, O_NORMAL_FLAGS);
 move-to(Player, null);
 
@@ -20,8 +20,10 @@ define method (Player) initialize() {
   set-owner(this, this);
   this:set-name("NewPlayer");
   lock(Login);
-  Login.players = Login.players + [this];
+  if (index-of(Login.players, this) == false)
+    Login.players = Login.players + [this];
   unlock(Login);
+  as(Thing):initialize();
 }
 set-method-flags(Player:initialize, O_OWNER_MASK);
 
@@ -65,8 +67,11 @@ set-slot-flags(Player, #home, O_ALL_R);
 define (Player) gender = #neuter;
 set-slot-flags(Player, #gender, O_ALL_R | O_OWNER_MASK);
 
-define (Player) screen-length = 20;
+define (Player) screen-length = 24;
 set-slot-flags(Player, #screen-length, O_ALL_R | O_OWNER_MASK);
+
+define (Player) screen-width = 80;
+set-slot-flags(Player, #screen-width, O_ALL_R | O_OWNER_MASK);
 
 define method (Player) set-home(newhome) {
   if (caller-effuid() != owner(this) && !privileged?(caller-effuid()))
@@ -88,7 +93,10 @@ define method (Player) set-programmer(v) {
 }
 
 define method (Player) connect-function() {
-  this:moveto(this.home);
+  if (location(this) == this.home)
+    this:mtell(location(this):look() + ["\n"]);
+  else
+    this:moveto(this.home);
   location(this):announce(this.name + " wakes up.\n");
 }
 set-setuid(Player:connect-function, false);
@@ -117,26 +125,29 @@ define method (Player) read() {
 }
 
 define method (Player) mtell(v) {
-  if (this:listening?()) {
-    if (realuid() == this) {
-      define i = 0;
-      define count = 0;
+  if (type-of(v) == #vector) {
+    if (this:listening?()) {
+      if (realuid() == this) {
+	define i = 0;
+	define count = 0;
 
-      while (i < length(v)) {
-        this:tell(v[i]);
-	i = i + 1;
-	count = count + 1;
+	while (i < length(v)) {
+          this:tell(v[i]);
+	  i = i + 1;
+	  count = count + 1;
 
-	if (this.screen-length && count >= this.screen-length) {
-          this:tell("Press ENTER for more, or type q to quit:");
-	  if (equal?(this:read(), "q"))
-	    return;
-	  count = 0;
+	  if (this.screen-length && count >= this.screen-length) {
+            this:tell("Press ENTER for more, or type q to quit:");
+	    if (equal?(this:read(), "q"))
+	      return;
+	    count = 0;
+	  }
 	}
-      }
-    } else
-      for-each(this:tell, v);
-  }
+      } else
+	for-each(this:tell, v);
+    }
+  } else
+    this:tell(v);
 }
 
 define method (Player) tell(x) {
@@ -151,6 +162,9 @@ define method (Player) pre-accept(what, oldloc)
   !isa(what, Player);
 make-method-overridable(Player:pre-accept, true);
 
+////////////////////////////////////////////////////////////////
+// WIZARDY STUFF
+
 set-parents(Wizard, Player);
 Wizard:initialize();
 Wizard.name = "Wizard";
@@ -162,6 +176,8 @@ define method (Wizard) @shutdown-verb(b) {
     checkpoint();
     shutdown();
   }, VM_STATE_NOQUOTA);
+
+  close(this.connection);
 }
 set-setuid(Wizard:@shutdown-verb, false);
 set-method-flags(Wizard:@shutdown-verb, O_OWNER_MASK);
@@ -220,23 +236,33 @@ define method (Player) @gender-verb(b) {
 Player:add-verb(#this, #@gender-verb, ["@gender ", #gender]);
 
 define method (Player) get-verb(b) {
+  define oname = b[#obj][0];
   define o = b[#obj][1];
 
-  if (!o)
-    this:tell("There doesn't appear to be anything called \"" + b[#obj][0] + "\" here.\n");
-  else {
-    define oldloc = location(o);
+  define function take1(x) {
+    define oldloc = location(x);
 
     if (oldloc == this) {
-      this:mtell(["You were already carrying ", o.name, ".\n"]);
-    } else if (o:moveto(this) == true) {
-      this:mtell(["You pick up ", o.name, ".\n"]);
-      oldloc:announce([this.name, " picks up ", o.name, ".\n"]);
+      this:mtell(["You were already carrying ", x.name, ".\n"]);
+    } else if (x:moveto(this) == true) {
+      this:mtell(["You pick up ", x.name, ".\n"]);
+      oldloc:announce([this.name, " picks up ", x.name, ".\n"]);
     } else {
-      this:mtell(["You fail to pick up ", o.name, ".\n"]);
-      oldloc:announce([this.name, " tries to pick up ", o.name, ", but fails.\n"]);
+      this:mtell(["You fail to pick up ", x.name, ".\n"]);
+      oldloc:announce([this.name, " tries to pick up ", x.name, ", but fails.\n"]);
     }
   }
+
+  if (o) {
+    take1(o);
+    return;
+  }
+
+  if (equal?(oname, "all") || equal?(oname, "everything")) {
+    this:tell("You begin picking up everything you can see.\n");
+    for-each(take1, contents(location(this)));
+  } else
+    this:tell("There doesn't appear to be anything called \"" + b[#obj][0] + "\" here.\n");
 }
 set-setuid(Player:get-verb, false);
 make-method-overridable(Player:get-verb, true);
@@ -248,19 +274,29 @@ for-each(function (pattern) Player:add-verb(#this, #get-verb, pattern),
 	 ]);
 
 define method (Player) drop-verb(b) {
+  define oname = b[#obj][0];
   define o = b[#obj][1];
 
-  if (!o)
-    this:tell("You can't find anything called \"", b[#obj][0], "\" to drop.\n");
-  else {
-    if (!index-of(contents(this), o))
-      this:mtell(["You aren't holding ", o.name, ".\n"]);
-    else if (o:moveto(location(this)) == true) {
-      this:mtell(["You drop ", o.name, ".\n"]);
-      location(this):announce([this.name, " drops ", o.name, ".\n"]);
+  define function drop1(x) {
+    if (!index-of(contents(this), x))
+      this:mtell(["You aren't holding ", x.name, ".\n"]);
+    else if (x:moveto(location(this)) == true) {
+      this:mtell(["You drop ", x.name, ".\n"]);
+      location(this):announce([this.name, " drops ", x.name, ".\n"]);
     } else
-      this:mtell(["You find that you cannot drop ", o.name, " here.\n"]);
+      this:mtell(["You find that you cannot drop ", x.name, " here.\n"]);
   }
+
+  if (o) {
+    drop1(o);
+    return;
+  }
+
+  if (equal?(oname, "all") || equal?(oname, "everything")) {
+    this:tell("You begin dropping everything you are carrying.\n");
+    for-each(drop1, contents(this));
+  } else
+    this:tell("You can't find anything called \"" + oname + "\" to drop.\n");
 }
 set-setuid(Player:drop-verb, false);
 make-method-overridable(Player:drop-verb, true);
@@ -290,7 +326,7 @@ define method (Player) @setlines-verb(b) {
 
   define l = as-num(b[#numlines][0]);
 
-  if (l > 0) {
+  if (l) {
     this.screen-length = l;
     realuid():tell("Your screen length is set to " + get-print-string(l) + ".\n");
   } else {
@@ -300,6 +336,21 @@ define method (Player) @setlines-verb(b) {
 }
 make-method-overridable(Player:@setlines-verb, true);
 Player:add-verb(#this, #@setlines-verb, ["@setlines ", #numlines]);
+
+define method (Player) @setcolumns-verb(b) {
+  if (caller-effuid() != owner(this))
+    return;
+
+  define l = as-num(b[#numcols][0]);
+
+  if (l) {
+    this.screen-width = l;
+    realuid():tell("Your screen width is set to " + get-print-string(l) + ".\n");
+  } else
+    realuid():tell("You have entered an invalid screen width. Setting not changed.\n");
+}
+make-method-overridable(Player:@setcolumns-verb, true);
+Player:add-verb(#this, #@setcolumns-verb, ["@setcolumns ", #numcols]);
 
 define method (Player) @sethome-verb(b) {
   if (caller-effuid() != owner(this))

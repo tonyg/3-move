@@ -1,5 +1,7 @@
 // root.move
 
+strip-object-clean(Root);
+
 define O_C_FLAG		= 0x00004000;
 define O_PERMS_MASK	= 0x00000FFF;
 define O_ALL_PERMS	= O_PERMS_MASK;
@@ -23,18 +25,6 @@ define O_WORLD_X	= 0x00000004;
 
 define O_NORMAL_FLAGS	= O_ALL_R | O_ALL_X | O_OWNER_MASK;
 
-define Wizard = clone(Root);
-set-privileged(Wizard, true);
-set-owner(Wizard, Wizard);
-set-owner(Root, Wizard);
-set-realuid(Wizard);
-set-effuid(Wizard);
-set-object-flags(Root, O_NORMAL_FLAGS);
-set-object-flags(Wizard, O_OWNER_MASK);	// wizard is a very private individual.
-
-define (Root) name = "The Root Object";
-set-slot-flags(Root, #name, O_ALL_R);
-
 define function make-method-overridable(meth, val) {
   define fl = method-flags(meth);
   if (val)
@@ -43,6 +33,65 @@ define function make-method-overridable(meth, val) {
     fl = fl & ~O_C_FLAG;
   set-method-flags(meth, fl);
 }
+
+{
+  if (real-clone == undefined) {
+    define the-clone = clone;
+    clone = null;
+    define-global(#real-clone, function () {
+      define caller = caller-effuid();
+      if (caller == null || privileged?(caller))
+	the-clone;
+      else
+	#no-permission-real-clone;
+    });
+  }
+}
+
+{
+  define the-clone = real-clone();
+
+  define method (Root) clone() {
+    define n = the-clone(this);
+    if (n) {
+      set-object-flags(n, O_NORMAL_FLAGS);
+      n:initialize();
+    }
+    n;
+  }
+  set-setuid(Root:clone, false);
+}
+
+define method (Root) initialize() true;
+make-method-overridable(Root:initialize, true);
+
+define function clone-if-undefined(name, parent) {
+  define val = symbol-value(name);
+
+  if (val == undefined)
+    define-global(name, val = parent:clone());
+  else {
+    strip-object-clean(val);
+    val:initialize();
+  }
+
+  val;
+}
+
+if (Wizard == undefined)
+  define-global(#Wizard, Root:clone());
+else
+  strip-object-methods(Wizard);
+set-privileged(Wizard, true);
+set-owner(Wizard, Wizard);
+set-owner(Root, Wizard);
+set-realuid(Wizard);
+set-effuid(Wizard);
+set-object-flags(Root, O_NORMAL_FLAGS);
+set-object-flags(Wizard, O_NORMAL_FLAGS);
+
+define (Root) name = "The Root Object";
+set-slot-flags(Root, #name, O_ALL_R);
 
 define method (Root) set-name(n) {
   define c = caller-effuid();
@@ -56,25 +105,6 @@ define method (Root) set-name(n) {
 Wizard:set-name("Wizard");
 
 move-to(Root, null);
-move-to(Wizard, null);
-
-{
-  define real-clone = clone;
-  clone = null;
-
-  define method (Root) clone() {
-    define n = real-clone(this);
-    if (n) {
-      set-object-flags(n, O_NORMAL_FLAGS);
-      n:initialize();
-    }
-    n;
-  }
-  set-setuid(Root:clone, false);
-}
-
-define method (Root) initialize() true;
-make-method-overridable(Root:initialize, true);
 
 define function all-methods(obj) {
   define p = parents(obj);

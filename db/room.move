@@ -2,7 +2,7 @@
 set-realuid(Wizard);
 set-effuid(Wizard);
 
-define Room = Thing:clone();
+clone-if-undefined(#Room, Thing);
 set-object-flags(Room, O_NORMAL_FLAGS | O_C_FLAG);
 Room:set-name("Generic Room");
 move-to(Room, null);
@@ -30,6 +30,9 @@ set-slot-flags(Room, #dark, O_ALL_R | O_OWNER_MASK);
 define (Room) exits = [];
 set-slot-flags(Room, #exits, O_ALL_R | O_OWNER_MASK);
 
+define (Room) attachable = false;
+set-slot-flags(Room, #attachable, O_OWNER_MASK);
+
 define method (Room) set-dark(val) {
   if (caller-effuid() != owner(this) && !privileged?(caller-effuid()))
     return false;
@@ -47,9 +50,18 @@ define method (Room) exits() {
 }
 
 define method (Room) can-modify-exits?(who) {
-  return (who == owner(this) || privileged?(who));
+  return (who == owner(this) || privileged?(who) || this.attachable);
 }
 make-method-overridable(Room:can-modify-exits?, true);
+
+define method (Room) attachable?() this.attachable;
+define method (Room) set-attachable(val) {
+  if (caller-effuid() != owner(this) && !privileged?(caller-effuid()))
+    return false;
+
+  this.attachable = val;
+  true;
+}
 
 define method (Room) add-exit(ex) {
   if (!this:can-modify-exits?(caller-effuid()) || !isa(ex, Exit))
@@ -94,6 +106,16 @@ make-method-overridable(Room:announce-all, true);
 define method (Room) announce-except(who, x)
   for-each(function (o) if (o != who) o:mtell(x), contents(this));
 make-method-overridable(Room:announce-except, true);
+
+define method (Room) match-verb(sent) {
+  define result = as(Thing):match-verb(sent);
+
+  if (result)
+    return result;
+
+  first-that(function (ex) result = ex:match-verb(sent), this:exits());
+  result;
+}
 
 define method (Room) match-object(name) {
   if (equal?(name, "here"))
@@ -154,25 +176,25 @@ define method (Room) look() {
     }, contents(this));
 
     if (length(objects) > 0)
-      val = val + [ "You see " + make-sentence(objects) + " here.\n" ];
+      val = val + wrap-string("You see " + make-sentence(objects) + " here.\n", 0);
 
     if (length(players) > 0) {
       if (length(players) == 1)
 	val = val + [ players[0].name + " is here.\n" ];
       else
-	val = val + [ make-sentence(players) + " are here.\n" ];
+	val = val + wrap-string(make-sentence(players) + " are here.\n", 0);
     }
   }
 
   define exits = this:exits();
   if (length(exits) > 0)
-    val = val + [
-		 "Obvious exits: " +
-		 reduce(function (acc, ex) acc + ", " + ex.name + " to " + ex.dest.name,
-			exits[0].name + " to " + exits[0].dest.name,
-			section(exits, 1, length(exits) - 1)) +
-		 "\n"
-		];
+    val = val + wrap-string(
+			    "Obvious exits: " +
+			    reduce(function (acc, ex) acc + ", " + ex.name + " to " + ex.dest.name,
+				   exits[0].name + " to " + exits[0].dest.name,
+				   section(exits, 1, length(exits) - 1)) +
+			    "\n",
+			    0);
 
   as(Thing):look() + val;
 }
@@ -201,12 +223,11 @@ define method (Room) @@shout-verb(b) {
   define player = realuid();
   define message = [
 		    player.name + " shouts from " + location(player).name + ":\n",
-		    b[#sent][0] + "\n"
+		    "\t" + b[#sent][0] + "\n"
 		   ];
 
   for-each(function (p) {
-    if (p != player)
-      p:mtell(message);
+    p:mtell(message);
   }, ap);
 }
 Room:add-verb(#this, #@@shout-verb, ["@@shout ", #sent]);
@@ -224,10 +245,16 @@ Room:add-verb(#room, #enter-verb, ["go to ", #room]);
 
 define method (Room) @dig-verb(b) {
   define name = b[#name][0];
+  define backlinkname = b[#backlinkname];
   define destname = b[#dest][0];
   define dest = b[#dest][1];
   define ptell = realuid():tell;
   define created-dest = false;
+
+  if (backlinkname == undefined)
+    backlinkname = "out";
+  else
+    backlinkname = backlinkname[0];
 
   if (dest) {
     if (!isa(dest, Room)) {
@@ -239,8 +266,10 @@ define method (Room) @dig-verb(b) {
     created-dest = true;
     dest = Room:clone();
     dest:set-name(destname);
-    if (Exit:dig("out", dest, this))
-      ptell("You dig the backlink exit, named \"out\", from \"" + destname + "\" to \"" +
+    if (Exit:dig(backlinkname, dest, this))
+      ptell("You dig the backlink exit, named \"" +
+	    backlinkname + "\", from \"" +
+	    dest.name + "\" to \"" +
 	    this.name + "\".\n");
     else
       ptell("You fail to dig the backlink.\n");
@@ -261,6 +290,8 @@ define method (Room) @dig-verb(b) {
 }
 set-setuid(Room:@dig-verb, false);
 Room:add-verb(#loc, #@dig-verb, ["@dig ", #loc, " to ", #dest, " as ", #name]);
+Room:add-verb(#loc, #@dig-verb, ["@dig2 ", #loc, " to ", #dest,
+				" as ", #name, " and ", #backlinkname]);
 
 define method (Room) @undig-verb(b) {
   define name = b[#name][0];
@@ -278,6 +309,19 @@ define method (Room) @undig-verb(b) {
 }
 set-setuid(Room:@undig-verb, false);
 Room:add-verb(#loc, #@undig-verb, ["@undig ", #name, " from ", #loc]);
+
+define method (Room) @setattach-verb(b) {
+  define val = b[#yes/no/true/false][0];
+  define ptell = realuid():tell;
+
+  val = !(equal?(val, "no") || equal?(val, "false"));
+  if (this:set-attachable(val))
+    ptell("You succeed in @setattaching " + this.name + ".\n");
+  else
+    ptell("You fail to @setattach " + this.name + ".\n");
+}
+set-setuid(Room:@setattach-verb, false);
+Room:add-verb(#loc, #@setattach-verb, ["@setattach ", #loc, " to ", #yes/no/true/false]);
 
 checkpoint();
 shutdown();
