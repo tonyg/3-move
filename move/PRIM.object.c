@@ -16,6 +16,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#define NOPERMISSION()	vm_raise(vms, (OBJ) newsym("no-permission"), (OBJ) argvec); \
+			return undefined
+
 PRIVATE void setup_ancestor(void) {
   OVECTOR ansym = newsym("Root");
 
@@ -198,6 +201,10 @@ DEFPRIM(lockObjFun) {
 
   TYPEERRIF(!OBJECTP(x));
 
+  if (!PRIVILEGEDP(vms->r->vm_effuid)) {
+    NOPERMISSION();
+  }
+
   if (vms->c.vm_locked_count > 0 && vms->r->vm_locked != (OBJECT) x) {
     vm_raise(vms, (OBJ) newsym("multiple-locks-disallowed"), x);
     return undefined;
@@ -215,6 +222,10 @@ DEFPRIM(unlockObjFun) {
 
   TYPEERRIF(!OBJECTP(x));
 
+  if (!PRIVILEGEDP(vms->r->vm_effuid)) {
+    NOPERMISSION();
+  }
+
   if (vms->r->vm_locked != (OBJECT) x)
     return false;
 
@@ -227,9 +238,6 @@ DEFPRIM(unlockObjFun) {
 
   return true;
 }
-
-#define NOPERMISSION()	vm_raise(vms, (OBJ) newsym("no-permission"), (OBJ) argvec); \
-			return undefined
 
 DEFPRIM(slotRefFun) {
   OBJ x = ARG(0);
@@ -791,6 +799,60 @@ DEFPRIM(methRefFun) {
   return (OBJ) result;
 }
 
+DEFPRIM(stripObjFun) {
+  OBJ x = ARG(0);
+  OBJECT ox = (OBJECT) x;
+
+  TYPEERRIF(!OBJECTP(x));
+
+  if (vms->r->vm_effuid != ox->owner && !PRIVILEGEDP(vms->r->vm_effuid)) {
+    NOPERMISSION();
+  }
+
+  LOCK(ox);
+  ox->finalize = 0;
+  ox->flags = O_OWNER_MASK;
+  ox->methods = newhashtable(19);
+  ox->attributes = newhashtable(19);
+  UNLOCK(ox);
+
+  return x;
+}
+
+DEFPRIM(stripObjMFun) {
+  OBJ x = ARG(0);
+  OBJECT ox = (OBJECT) x;
+
+  TYPEERRIF(!OBJECTP(x));
+
+  if (vms->r->vm_effuid != ox->owner && !PRIVILEGEDP(vms->r->vm_effuid)) {
+    NOPERMISSION();
+  }
+
+  LOCK(ox);
+  ox->methods = newhashtable(19);
+  UNLOCK(ox);
+
+  return x;
+}
+
+DEFPRIM(stripObjSFun) {
+  OBJ x = ARG(0);
+  OBJECT ox = (OBJECT) x;
+
+  TYPEERRIF(!OBJECTP(x));
+
+  if (vms->r->vm_effuid != ox->owner && !PRIVILEGEDP(vms->r->vm_effuid)) {
+    NOPERMISSION();
+  }
+
+  LOCK(ox);
+  ox->attributes = newhashtable(19);
+  UNLOCK(ox);
+
+  return x;
+}
+
 PUBLIC void install_PRIM_object(void) {
   setup_ancestor();
   pthread_mutex_init(&moving_lock, NULL);
@@ -831,4 +893,7 @@ PUBLIC void install_PRIM_object(void) {
   register_prim("has-method", 0x04021, hasMethFun);
   register_prim("slot-clear?", 0x04022, slotClearPFun);
   register_prim("method-ref", 0x04023, methRefFun);
+  register_prim("strip-object-clean", 0x04024, stripObjFun);
+  register_prim("strip-object-methods", 0x04025, stripObjMFun);
+  register_prim("strip-object-slots", 0x04026, stripObjSFun);
 }
