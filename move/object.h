@@ -205,7 +205,7 @@ typedef struct OVector {
 #define DETAG(x)	(((unum) (x)) >> 2)
 
 #define NUMP(x)		(TAG(x) == 1)
-#define MKNUM(x)	((OBJ) (((x) << 2) | 1))
+#define MKNUM(x)	((OBJ) (((inum) (x) << 2) | 1))
 #define NUM(x)		(((inum) (x)) >> 2)
 #define UNUM(x)		(((unum) (x)) >> 2)
 
