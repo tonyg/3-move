@@ -108,7 +108,7 @@ PRIVATE void bind_number(PDATA p, int num, OBJ obj) {
 /***********************************************************************/
 
 PUBLIC void *start_save(FILE *dest) {
-  u32 version = htonl(DBFMT_BIG_32);
+  u32 version = (u32) htonl(DBFMT_BIG_32);
   PDATA p = newpdata(dest);
 
   rewind(dest);
@@ -134,7 +134,7 @@ PUBLIC void save(void *handle, OBJ root) {
 
   if (TAGGEDP(root)) {
     if (NUMP(root)) {
-      i32 val = htonl(NUM(root));
+      i32 val = (i32) htonl(NUM(root));
       fputc('I', p->f);
       fwrite(&val, sizeof(i32), 1, p->f);
     } else if (SINGLETONP(root)) {
@@ -153,7 +153,7 @@ PUBLIC void save(void *handle, OBJ root) {
 
   if (n != -1) {
     fputc('R', p->f);
-    n = htonl(n);
+    n = (i32) htonl(n);
     fwrite(&n, sizeof(int), 1, p->f);
     return;
   }
@@ -162,18 +162,18 @@ PUBLIC void save(void *handle, OBJ root) {
   bind_number(p, n, root);
 
   fputc('O', p->f);
-  n = htonl(n);
+  n = (i32) htonl(n);
   fwrite(&n, sizeof(i32), 1, p->f);
 
   {
-    u32 u_n = htonl(((u32) root->length << 2) | root->kind);
+    u32 u_n = (u32) htonl(((u32) root->length << 2) | root->kind);
     fwrite(&u_n, sizeof(u32), 1, p->f);
   }
 
   switch (root->kind) {
     case KIND_OBJECT: {
       OBJECT oroot = (OBJECT) root;
-      u32 u = htonl((oroot->flags << 1) | oroot->finalize);
+      u32 u = (u32) htonl((oroot->flags << 1) | oroot->finalize);
 
       fwrite(&u, sizeof(u32), 1, p->f);
       save(handle, (OBJ) oroot->methods);
@@ -193,7 +193,7 @@ PUBLIC void save(void *handle, OBJ root) {
     case KIND_OVECTOR: {
       OVECTOR oroot = (OVECTOR) root;
       int i;
-      u32 u = htonl((oroot->type << 1) | oroot->finalize);
+      u32 u = (u32) htonl((oroot->type << 1) | oroot->finalize);
 
       fwrite(&u, sizeof(u32), 1, p->f);
 
@@ -229,7 +229,7 @@ PUBLIC void *start_load(FILE *source) {
   fread(&version, sizeof(u32), 1, source);
 
   if (!memcmp(DBFMT_SIGNATURE, sig, DBFMT_SIG_LEN)) {
-    p->db_version = ntohl(version);
+    p->db_version = (u32) ntohl(version);
   } else
     rewind(source);
 
@@ -359,7 +359,7 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
     case 'I': {
       i32 val;
       fread(&val, sizeof(i32), 1, p->f);
-      return MKNUM(ntohl(val));
+      return MKNUM((i32) ntohl(val));
     }
 
     case 'S': {
@@ -371,7 +371,7 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
     case 'R': {
       OBJ o;
       fread(&n, sizeof(i32), 1, p->f);
-      n = ntohl(n);
+      n = (i32) ntohl(n);
       if (!find_obj(p, n, &o)) {
 	fprintf(stderr, "error loading database! object not found by number (%d)!\n", n);
 	exit(MOVE_EXIT_DBFMT_ERROR);
@@ -385,9 +385,9 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
       u32 u_kind, u_length;
 
       fread(&n, sizeof(i32), 1, p->f);
-      n = ntohl(n);
+      n = (i32) ntohl(n);
       fread(&u_n, sizeof(u32), 1, p->f);
-      u_n = ntohl(u_n);
+      u_n = (u32) ntohl(u_n);
 
       u_kind = u_n & 3;
       u_length = u_n >> 2;
@@ -402,7 +402,7 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
 	  obj = (OBJECT) o;
 
 	  fread(&u, sizeof(u32), 1, p->f);
-	  u = ntohl(u);
+	  u = (u32) ntohl(u);
 	  obj->finalize = u & 1;
 	  obj->flags = u >> 1;
 
@@ -430,7 +430,7 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
 	  u32 u;
 
 	  fread(&u, sizeof(u32), 1, p->f);
-	  u = ntohl(u);
+	  u = (u32) ntohl(u);
 	  obj = newovector_noinit(u_length, u >> 1);
 	  o = (OBJ) obj;
 	  bind_object(p, n, o);
