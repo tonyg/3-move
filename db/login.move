@@ -21,7 +21,15 @@ move-to(Login, null);
   set-slot-flags(Login, #active-players, O_OWNER_MASK);
 }
 
-define (Login) login-message =
+{
+  if (!has-slot(Login, #guests))
+    define (Login) guests = [];
+  set-slot-flags(Login, #guests, O_OWNER_MASK);
+}
+
+{
+  if (!has-slot(Login, #login-message))
+    define (Login) login-message =
 "\n"
 "	    _/      _/    _/_/_/    _/      _/  _/_/_/_/_/	\n"
 "	   _/_/  _/_/  _/      _/    _/  _/    _/		\n"
@@ -31,13 +39,17 @@ define (Login) login-message =
 "\n"
 "\n"
 ;
+}
 set-slot-flags(Login, #login-message, O_ALL_R);
 
-define (Login) motd =
+{
+  if (!has-slot(Login, #motd))
+    define (Login) motd =
 "\n"
 "Welcome to MOVE."
 "\n"
 ;
+}
 set-slot-flags(Login, #motd, O_ALL_R);
 
 {
@@ -52,6 +64,48 @@ set-slot-flags(Login, #motd, O_ALL_R);
   }
 }
 
+define method (Login) add-player(p) {
+  if (!privileged?(caller-effuid()))
+    return false;
+
+  lock(this);
+  if (index-of(this.players, p) == false)
+    this.players = this.players + [p];
+  unlock(this);
+  return true;
+}
+
+define method (Login) del-player(p) {
+  if (!privileged?(caller-effuid()))
+    return false;
+
+  lock(this);
+  this.players = remove(this.players, p);
+  unlock(this);
+  return true;
+}
+
+define method (Login) add-guest(p) {
+  if (!privileged?(caller-effuid()))
+    return false;
+
+  lock(this);
+  if (index-of(this.guests, p) == false)
+    this.guests = this.guests + [p];
+  unlock(this);
+  return true;
+}
+
+define method (Login) del-guest(p) {
+  if (!privileged?(caller-effuid()))
+    return false;
+
+  lock(this);
+  this.guests = remove(this.guests, p);
+  unlock(this);
+  return true;
+}
+
 define function do-login(conn) {
   if (!privileged?(caller-effuid()))	// additional check. Perms should also disallow.
     return false;
@@ -59,11 +113,25 @@ define function do-login(conn) {
   while (!closed?(conn)) {
     print-on(conn, "login: ");
     define lname = read-from(conn);
-    print-on(conn, "Password: ");
-    define lpass = read-from(conn);
+    define lpass = "";
+    if (!equal?(lname, "Guest")) {
+      print-on(conn, "Password: ");
+      lpass = read-from(conn);
+    }
 
     lock(Login);
-    define player = find-by-name(Login.players, lname);
+    define player =
+      if (equal?(lname, "Guest")) {
+	define g = first-that(function (g) !g.awake, Login.guests);
+	if (g == undefined)
+	  print-on(conn,
+		   "\n"
+		   "All guest characters are in use at the moment.\n"
+		   "Try again later.\n"
+		   );
+	g;
+      } else
+	find-by-name(Login.players, lname);
     unlock(Login);
 
     if (player == undefined) {

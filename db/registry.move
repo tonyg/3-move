@@ -99,7 +99,22 @@ define method (Registry) @deregister-verb(b) {
 }
 Registry:add-verb(#reg, #@deregister-verb, ["@deregister ", #obj, " from ", #reg]);
 
-for-each(Registry:register, [Thing, Player, Room, Exit, Note, Program, Registry, Wizard]);
+define method (Registry) @enumerate-verb(b) {
+  define i = 0;
+  define acc = ["Registry objects:\n"];
+
+  while (i < this.next-number) {
+    define o = this:at(i);
+    if (o != undefined)
+      acc = acc + ["\t" + get-print-string(i) + "\t" + o:fullname() + "\n"];
+    i = i + 1;
+  }
+
+  realuid():mtell(acc);
+}
+Registry:add-verb(#reg, #@enumerate-verb, ["@enumerate ", #reg]);
+
+for-each(Registry:register, [Thing, Player, Room, Exit, Note, Program, Registry, Wizard, Guest]);
 
 checkpoint();
 shutdown();

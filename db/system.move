@@ -14,6 +14,15 @@ define function map(f, x) {
   return v;
 }
 
+define function remove(v, elt) {
+  define i = index-of(v, elt);
+
+  if (i)
+    delete(v, i, 1);
+  else
+    v;
+}
+
 define function for-each(f, x) {
   define i = 0;
 
@@ -47,7 +56,11 @@ define function reduce(f, st, vec) {
 }
 
 define function find-by-name(vec, name)
-     first-that(function (x) equal?(x.name, name), vec);
+     first-that(function (x) equal?(x.name, name) ||
+			     (length(name) > 0 &&
+			      !slot-clear?(x, #registry-number) &&
+			      as-num(section(name, 1, -1)) == x.registry-number),
+		vec);
 
 define function valid(obj) type-of(obj) == #object;
 
@@ -312,6 +325,15 @@ define function make-sentence(vec) {
 }
 
 define function object-named(name) {
+  if (length(name) > 0 && equal?(section(name, 0, 1), "#")) {
+    define n = as-num(section(name, 1, -1));
+    if (n) {
+      define rego = Registry:at(n);
+      if (rego != undefined)
+	return rego;
+    }
+  }
+
   define player = realuid();
   player:match-object(name) || location(player):match-object(name);
 }

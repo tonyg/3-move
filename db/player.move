@@ -1,4 +1,4 @@
-// player.move -- also stuff on Wizard!
+// player.move -- also stuff on Wizard and Guests!
 set-realuid(Wizard);
 set-effuid(Wizard);
 
@@ -6,7 +6,12 @@ clone-if-undefined(#Player, Thing);
 set-object-flags(Player, O_NORMAL_FLAGS);
 move-to(Player, null);
 
+clone-if-undefined(#Guest, Player);
+set-object-flags(Guest, O_NORMAL_FLAGS);
+move-to(Guest, null);
+
 Player:set-description(["You see a player who needs to @describe %r.\n"]);
+Guest:set-description(["By definition, guests appear nondescript.\n"]);
 
 define method (Player) clone() {
   if (!privileged?(effuid()))
@@ -19,14 +24,22 @@ set-setuid(Player:clone, false);
 define method (Player) initialize() {
   set-owner(this, this);
   this:set-name("NewPlayer");
-  lock(Login);
-  if (index-of(Login.players, this) == false)
-    Login.players = Login.players + [this];
-  unlock(Login);
+  Login:add-player(this);
   as(Thing):initialize();
+  move-to(this, this.home);
 }
 set-method-flags(Player:initialize, O_OWNER_MASK);
 
+define method (Guest) initialize() {
+  set-owner(this, Wizard);
+  this:set-name("NewGuest");
+  Login:add-guest(this);
+  as(Thing):initialize();
+  move-to(this, this.home);
+}
+set-method-flags(Guest:initialize, O_OWNER_MASK);
+
+// Player:new is a bit of a relic now that we have @build...
 define method (Player) new(newname) {
   define p = Player:clone();
   p:set-name(newname);
@@ -36,6 +49,7 @@ set-setuid(Player:new, false);
 set-method-flags(Player:new, O_OWNER_MASK);
 
 Player:set-name("Generic Player");
+Guest:set-name("Generic Guest");
 
 define method (Player) set-name(n) {
   if (!privileged?(caller-effuid()))
@@ -401,7 +415,7 @@ define method (Player) @space-verb(b) {
 }
 
 define method (Player) @quit-verb(b) {
-  if (caller-effuid() != owner(this))
+  if (caller-effuid() != this)
     return;
 
   close(this.connection);
