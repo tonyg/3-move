@@ -192,6 +192,7 @@ define function repl-thread-main(sock) {
 
   define abort = null;
   define function excp-handler(excp, arg, vms, acc) {
+    set-thread-quota(current-thread(), VM_STATE_DAEMON); // jic we ate all our quota.
     if (type-of(arg) == #vector)
       arg = map(get-print-string, arg);
     realuid():mtell([
@@ -224,6 +225,7 @@ define function repl-thread-main(sock) {
   player.connection = sock;
 
   define function do-mud-command-shell(p, s) {
+    set-thread-quota(current-thread(), 100000);	// enough?? we'll see.
     do-mud-command(p, s);
   }
   set-setuid(do-mud-command-shell, true);	// a-ha!
