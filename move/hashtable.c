@@ -11,7 +11,7 @@ PUBLIC OVECTOR newhashtable(int len) {
 }
 
 PUBLIC OVECTOR hashtable_get(OVECTOR table, OVECTOR keysym) {
-  u32 h = (NUM(AT(keysym, SY_HASH)) % (table->_.length - 1)) + 1;
+  unum h = (NUM(AT(keysym, SY_HASH)) % (table->_.length - 1)) + 1;
   OVECTOR value = (OVECTOR) AT(table, h);
   
   while (value != NULL) {
@@ -25,7 +25,7 @@ PUBLIC OVECTOR hashtable_get(OVECTOR table, OVECTOR keysym) {
 }
 
 PUBLIC void hashtable_put(OVECTOR table, OVECTOR keysym, OVECTOR value) {
-  u32 h = (NUM(AT(keysym, SY_HASH)) % (table->_.length - 1)) + 1;
+  unum h = (NUM(AT(keysym, SY_HASH)) % (table->_.length - 1)) + 1;
   OVECTOR curr, prev;
 
   curr = (OVECTOR) AT(table, h);

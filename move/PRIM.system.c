@@ -223,7 +223,7 @@ DEFPRIM(setSetuidFun) {
   OVECTOR clos = (OVECTOR) c;
   OBJ newval = ARG(1);
   OVECTOR meth;
-  u32 fl;
+  unum fl;
 
   TYPEERRIF(!(OVECTORP(c) && clos->type == T_CLOSURE));
 

@@ -606,7 +606,7 @@ DEFPRIM(setMethFlagsFun) {
   OBJ c = ARG(0);
   OVECTOR clos = (OVECTOR) c;
   OBJ newflags = ARG(1);
-  u32 fl;
+  unum fl;
   OVECTOR meth;
 
   TYPEERRIF(!NUMP(newflags) || !(OVECTORP(c) && clos->type == T_CLOSURE));

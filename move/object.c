@@ -164,8 +164,8 @@ PUBLIC unsigned long hash_str(char *string) {
 }
 
 PUBLIC OVECTOR newsym(char *name) {
-  u32 rawhash = UNUM(MKNUM(hash_str(name)));
-  u32 h = rawhash % SYMTAB_SIZE;
+  unum rawhash = UNUM(MKNUM(hash_str(name)));
+  unum h = rawhash % SYMTAB_SIZE;
   OVECTOR sym;
 
   pthread_mutex_lock(&symtab_mutex);
