@@ -19,6 +19,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <netinet/in.h>
 
 #if 1
 #define DEBUG
@@ -435,8 +436,18 @@ PUBLIC void save_restartable_threads(void *phandle, FILE *f) {
       if (t->vms->c.vm_state != VM_STATE_DYING &&
 	  t->vms->c.vm_state != VM_STATE_NOQUOTA) {
 	printf("saving");
-	fwrite(&t->number, sizeof(int), 1, f);
-	fwrite(&t->vms->c, sizeof(VMregs_C), 1, f);
+	{
+	  int tmp = htonl(t->number);
+	  fwrite(&tmp, sizeof(int), 1, f);
+	}
+	{
+	  VMregs_C tmp;
+	  tmp.vm_ip = htonl(t->vms->c.vm_ip);
+	  tmp.vm_top = htonl(t->vms->c.vm_top);
+	  tmp.vm_state = htonl(t->vms->c.vm_state);
+	  tmp.vm_locked_count = htonl(t->vms->c.vm_locked_count);
+	  fwrite(&tmp, sizeof(VMregs_C), 1, f);
+	}
 	save(phandle, (OBJ) t->vms->r);
       }
       printf("\n");
@@ -451,11 +462,14 @@ PUBLIC void save_restartable_threads(void *phandle, FILE *f) {
 
 PUBLIC void load_restartable_threads(void *phandle, FILE *f) {
   int i;
+  int use_net_byte_ordering = (get_handle_dbfmt(phandle) == DBFMT_NET_32);
 
   while (1) {
     VMSTATE vms;
 
     fread(&i, sizeof(int), 1, f);
+    if (use_net_byte_ordering)
+      i = ntohl(i);
 
     if (i >= next_number)
       next_number = i + 1;
@@ -466,6 +480,12 @@ PUBLIC void load_restartable_threads(void *phandle, FILE *f) {
     printf("loading thread %d...\n", i);
     vms = allocmem(sizeof(VMstate));
     fread(&vms->c, sizeof(VMregs_C), 1, f);
+    if (use_net_byte_ordering) {
+      vms->c.vm_ip = ntohl(vms->c.vm_ip);
+      vms->c.vm_top = ntohl(vms->c.vm_top);
+      vms->c.vm_state = ntohl(vms->c.vm_state);
+      vms->c.vm_locked_count = ntohl(vms->c.vm_locked_count);
+    }
     vms->r = (VMREGS) load(phandle);
     /*
       printf("(vm_locked is %p at %d)\n", vms->r->vm_locked, vms->c.vm_locked_count);
@@ -500,4 +520,20 @@ PUBLIC ThreadStat *get_thread_stats(void) {
   }
 
   return tab;
+}
+
+PUBLIC int get_thread_status(int n, ThreadStat *status) {
+  THREAD t;
+
+  t = find_thread_by_number(n);
+
+  if (t == NULL)
+    return 0;
+  else {
+    status->number = t->number;
+    status->owner = t->vms->r->vm_uid;
+    status->sleeping = (t->queue == &sleep_q);
+    status->status = t->contextkind;
+    return 1;
+  }
 }

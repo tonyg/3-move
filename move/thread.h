@@ -67,5 +67,6 @@ extern void load_restartable_threads(void *phandle, FILE *f);
 extern void save_restartable_threads(void *phandle, FILE *f);
 
 extern ThreadStat *get_thread_stats(void);
+extern int get_thread_status(int n, ThreadStat *status);
 
 #endif
