@@ -7,7 +7,7 @@ set-object-flags(Note, O_NORMAL_FLAGS | O_C_FLAG);
 
 Note:set-name("Generic Note");
 Note:set-description(["A small piece of lined paper.\n"]);
-Note:add-alias("note");
+//Note:add-alias("note");
 
 define (Note) text = [];
 set-slot-flags(Note, #text, O_OWNER_MASK);
