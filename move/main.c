@@ -22,13 +22,19 @@
 
 #include <pthread.h>
 
+#if 1
+#define DPR(args)	printf args ; fflush(stdout)
+#else
+#define DPR(args)
+#endif
+
 PRIVATE pthread_mutex_t boot_mutex;
 PRIVATE pthread_cond_t boot_signal;
 
 typedef struct repl_data {
   OVECTOR input, output;
   VMREGS vmregs;
-  OBJ holder;
+  OBJ holder, holder2;
 } repl_data, *REPL_DATA;
 
 PRIVATE void *repl(void *arg) {
@@ -38,7 +44,7 @@ PRIVATE void *repl(void *arg) {
 
   rd->input = (OVECTOR) AT(args, 0);
   rd->output = (OVECTOR) AT(args, 1);
-  rd->holder = NULL;
+  rd->holder = rd->holder2 = NULL;
 
   protect((OBJ *)(&rd->input));
   protect((OBJ *)(&rd->output));
@@ -48,6 +54,7 @@ PRIVATE void *repl(void *arg) {
   pthread_mutex_unlock(&boot_mutex);
 
   protect(&rd->holder);
+  protect(&rd->holder2);
 
   gc_inc_safepoints();
   rd->vmregs = (VMREGS) newvector(NUM_VMREGS);	/* dodgy casting :-) */
@@ -58,15 +65,27 @@ PRIVATE void *repl(void *arg) {
   vms.r->vm_input = rd->input;
   vms.r->vm_output = rd->output;
 
+  {
+    char buf[80];
+
+    sprintf(buf, "%ld --> You are thread %ld.\n", pthread_self(), pthread_self());
+    conn_puts(buf, rd->output);
+  }
+
   while (vms.c.vm_state == 1) {
     ScanInst si;
     char buf[256];
 
     rd->holder = (OBJ) newbvector(0);
-    gc_dec_safepoints();
 
     while (1) {
-      if (conn_gets(buf, 256, rd->input) == NULL)
+      char *result;
+
+      gc_dec_safepoints();
+      result = conn_gets(buf, 256, rd->input);
+      gc_inc_safepoints();
+
+      if (result == NULL)
 	break;
 
       while (1) {
@@ -81,39 +100,44 @@ PRIVATE void *repl(void *arg) {
       if (!strcmp(buf, ".\n"))
 	break;
 
-      rd->holder = (OBJ) bvector_concat((BVECTOR) rd->holder, newstring(buf));
+      rd->holder2 = (OBJ) newstring(buf);
+      rd->holder = (OBJ) bvector_concat((BVECTOR) rd->holder, (BVECTOR) rd->holder2);
+      gc_reach_safepoint();
     }
-
-    gc_inc_safepoints();
 
     if (conn_closed(rd->input)) {
       break;
     }
 
-    fill_scaninst(&si, newstringconn((BVECTOR) rd->holder));
-    rd->holder = (OBJ) parse(&vms, &si);
-    gc_reach_safepoint();
+    rd->holder2 = (OBJ) newstringconn((BVECTOR) rd->holder);
+    fill_scaninst(&si, (OVECTOR) rd->holder2);
 
-    if (rd->holder == NULL) {
-      sprintf(buf, "-->! the compiler returned an error condition.\n");
-    } else {
-      gc_dec_safepoints();
-      vms.r->vm_uid = vms.r->vm_effuid = NULL;
-      run_vm(&vms, NULL, (OVECTOR) rd->holder);
-      gc_inc_safepoints();
-
-      rd->holder = (OBJ) newvector(2);
-      ATPUT((VECTOR) rd->holder, 0, NULL);
-      ATPUT((VECTOR) rd->holder, 1, vms.r->vm_acc);
-      rd->holder = lookup_prim(0x00001)(&vms, (VECTOR) rd->holder);
-      rd->holder = (OBJ) bvector_concat((BVECTOR) rd->holder, newbvector(1));
-      	/* terminates C-string */
+    while (!conn_closed((OVECTOR) rd->holder2) && vms.c.vm_state == 1) {
+      rd->holder = (OBJ) parse(&vms, &si);
       gc_reach_safepoint();
 
-      sprintf(buf, "--> %s\n", ((BVECTOR) rd->holder)->vec);
-    }
+      if (rd->holder == NULL) {
+	sprintf(buf, "%ld -->! the compiler returned NULL.\n", pthread_self());
+      } else {
+	gc_dec_safepoints();
+	ATPUT((OVECTOR) rd->holder, ME_OWNER, (OBJ) vms.r->vm_uid);
+	vms.r->vm_effuid = vms.r->vm_uid;
+	run_vm(&vms, NULL, (OVECTOR) rd->holder);
+	gc_inc_safepoints();
+	
+	rd->holder = (OBJ) newvector(2);
+	ATPUT((VECTOR) rd->holder, 0, NULL);
+	ATPUT((VECTOR) rd->holder, 1, vms.r->vm_acc);
+	rd->holder = lookup_prim(0x00001)(&vms, (VECTOR) rd->holder);
+	rd->holder = (OBJ) bvector_concat((BVECTOR) rd->holder, newbvector(1));
+      	/* terminates C-string */
+	gc_reach_safepoint();
 
-    conn_puts(buf, rd->output);
+	sprintf(buf, "%ld --> %s\n", pthread_self(), ((BVECTOR) rd->holder)->vec);
+      }
+
+      conn_puts(buf, rd->output);
+    }
   }
 
   conn_close(rd->input);
@@ -122,6 +146,7 @@ PRIVATE void *repl(void *arg) {
   gc_dec_safepoints();
 
   unprotect((OBJ *)(&rd->vmregs));
+  unprotect(&rd->holder2);
   unprotect(&rd->holder);
   unprotect((OBJ *)(&rd->output));
   unprotect((OBJ *)(&rd->input));
@@ -173,18 +198,6 @@ PRIVATE void *listener(void *arg) {
 
   if (listen(server, 5) == -1)
     return NULL;
-
-  {
-    OVECTOR ci, co;
-
-    printf("listening on stdin\n");
-
-    gc_inc_safepoints();
-    ci = newfileconn(0);	/* stdin */
-    co = newfileconn(1);	/* stdout */
-    start_connection(ci, co);
-    gc_dec_safepoints();
-  }
 
   while (1) {
     int fd = accept(server, (struct sockaddr *) &addr, &addrlen);
@@ -240,6 +253,27 @@ PRIVATE void siginthandler(int dummy) {
   exit(123);
 }
 
+PRIVATE void import_cmdline_files(int argc, char *argv[]) {
+  int i;
+  OVECTOR ci, co;
+
+  gc_inc_safepoints();
+  co = newfileconn(1);
+
+  for (i = 0; i < argc; i++) {
+    int fd = open(argv[i], O_RDONLY);
+
+    if (fd == -1)
+      continue;
+
+    printf("importing %s\n", argv[i]);
+    ci = newfileconn(fd);
+    start_connection(ci, co);
+  }
+
+  gc_dec_safepoints();
+}
+
 PUBLIC int main(int argc, char *argv[]) {
   pthread_t gc_thread, listener_thread, finalizer_thread;
 
@@ -258,6 +292,20 @@ PUBLIC int main(int argc, char *argv[]) {
   pthread_create(&gc_thread, NULL, vm_gc_thread_main, NULL);
   pthread_create(&listener_thread, NULL, listener, NULL);
   pthread_create(&finalizer_thread, NULL, finalizer, NULL);
+
+  import_cmdline_files(argc - 1, argv + 1);
+
+  {
+    OVECTOR ci, co;
+
+    printf("listening on stdin\n");
+
+    gc_inc_safepoints();
+    ci = newfileconn(0);	/* stdin */
+    co = newfileconn(1);	/* stdout */
+    start_connection(ci, co);
+    gc_dec_safepoints();
+  }
 
   pthread_join(listener_thread, NULL);
   finalizer_quit = 1;
