@@ -6,7 +6,6 @@ clone-if-undefined(#Thing, Root);
 set-object-flags(Thing, O_NORMAL_FLAGS | O_C_FLAG);
 
 Thing:set-name("Generic Thing");
-move-to(Thing, null);
 
 define (Thing) description = ["A non-descript kind of thing, really. Not much to look at.\n"];
 set-slot-flags(Thing, #description, O_OWNER_MASK);
@@ -23,21 +22,33 @@ define method (Thing) initialize() {
 }
 make-method-overridable(Thing:initialize, true);
 
+define method (Thing) aliases() copy-of(this.aliases);
+
 define method (Thing) add-alias(n) {
   if (caller-effuid() != owner(this) && !privileged?(caller-effuid()))
     return false;
 
-  if (slot-clear?(this, #aliases))
-    this.aliases = [n];
-  else
-    this.aliases = this.aliases + [n];
+  this.aliases = this.aliases + [n];
   return true;
 }
 
-define method (Thing) aliases() {
-  (if (slot-clear?(this, #aliases)) []; else this.aliases) +
-  (if (this == Thing) []; else
-    reduce(function (acc, par) acc + par:aliases(), [], parents(this)));
+define method (Thing) del-alias(n) {
+  if (caller-effuid() != owner(this) && !privileged?(caller-effuid()))
+    return false;
+
+  define i = 0;
+  define v = this.aliases;
+  define l = length(v);
+
+  while (i < l) {
+    if (equal?(v[i], n)) {
+      this.aliases = delete(v, i, 1);
+      return true;
+    }
+    i = i + 1;
+  }
+
+  return false;
 }
 
 define method (Thing) add-verb(selfvar, methname, pattern) {
@@ -192,6 +203,16 @@ define method (Thing) mtell(vec) {
 define method (Thing) tell(x) undefined;
 make-method-overridable(Thing:tell, true);
 
+define method (Thing) announce(x) this:announce-except(realuid(), x);
+
+define method (Thing) announce-all(x)
+  for-each(function (o) o:mtell(x), contents(this));
+make-method-overridable(Thing:announce-all, true);
+
+define method (Thing) announce-except(who, x)
+  for-each(function (o) if (o != who) o:mtell(x), contents(this));
+make-method-overridable(Thing:announce-except, true);
+
 define method (Thing) listening?() false;
 make-method-overridable(Thing:listening?, true);
 
@@ -202,15 +223,15 @@ define method (Thing) moveto(loc) {
   define caller = caller-effuid();
   define oldloc = location(this);
 
-  if (caller != owner(this) && caller != owner(oldloc) && !privileged?(caller))
-    return #no-permission;
-
   if (oldloc != loc) {
-    if (!this:pre-move(oldloc, loc) || !loc:pre-accept(this, oldloc))
+    if (valid(oldloc) && isa(oldloc, Thing) && !oldloc:release(this, loc))
+      return #exit-rejected;
+
+    if (!this:pre-move(oldloc, loc))
       return #move-rejected;
 
-    if (valid(oldloc) && isa(oldloc, Thing))
-      oldloc:release(this, loc);
+    if (!loc:pre-accept(this, oldloc))
+      return #entry-rejected;
 
     move-to(this, loc);
 
@@ -231,7 +252,7 @@ make-method-overridable(Thing:post-accept, true);
 define method (Thing) post-move(oldloc, loc) true;
 make-method-overridable(Thing:post-move, true);
 
-define method (Thing) release(what, newloc) undefined;
+define method (Thing) release(what, newloc) true;
 make-method-overridable(Thing:release, true);
 
 define method (Thing) description() copy-of(this.description);
@@ -283,6 +304,8 @@ Thing:add-verb(#obj, #setdesc-verb, ["@describe ", #obj]);
 define method (Thing) @name-verb(b) {
   define player = realuid();
   define name = b[#name][0];
+  if (object-named(name))
+    player:tell("Warning: there's already an object with that name that you can see.\n");
   player:mtell(["Renaming ", this, " to \"", name, "\"...\n"]);
   if (this:set-name(name))
     player:tell("Successful.\n");
@@ -304,6 +327,18 @@ define method (Thing) @alias-verb(b) {
 set-setuid(Thing:@alias-verb, false);
 Thing:add-verb(#obj, #@alias-verb, ["@alias ", #obj, " as ", #name]);
 
+define method (Thing) @unalias-verb(b) {
+  define player = realuid();
+  define name = b[#name][0];
+  player:mtell(["Unaliasing ", this, " as \"", name, "\"...\n"]);
+  if (this:del-alias(name))
+    player:tell("Successful.\n");
+  else
+    player:tell("Permission denied.\n");
+}
+set-setuid(Thing:@unalias-verb, false);
+Thing:add-verb(#obj, #@unalias-verb, ["@unalias ", #obj, " as ", #name]);
+
 define method (Thing) look() {
   [
    "\n",
@@ -324,6 +359,9 @@ define method (Thing) examine() {
 
   s = s + "Location: " + get-print-string(location(this)) + "\n";
 
+  s = s + "Contents: " + string-wrap-string(get-print-string(map(function (x) x.name,
+ 								 contents(this))), 0) + "\n";
+
   {
     define al = this:aliases();
 
@@ -341,13 +379,6 @@ define method (Thing) examine() {
       s = reduce(function (acc, par) acc + ", " + par.name, s, section(pa, 1, length(pa) - 1)) +
 	"\n";
     }
-  }
-
-  {
-    define l = location(this);
-
-    if (valid(l))
-      s = s + "Location: " + l.name + "\n";
   }
 
   s = s + "Methods: " + string-wrap-string(get-print-string(methods(this)), 0) + "\n";
@@ -402,9 +433,11 @@ define method (Thing) @verbs-verb(b) {
 Thing:add-verb(#obj, #@verbs-verb, ["@verbs ", #obj]);
 
 define method (Thing) @space-verb(b) {
-  if (this:space())
+  define oldloc = location(this);
+  if (this:space()) {
+    oldloc:announce([realuid().name, " spaces ", this, ".\n"]);
     realuid():tell("You have @spaced " + get-print-string(this) + ".\n");
-  else
+  } else
     realuid():tell("You have no permission to @space that object.\n");
 }
 set-setuid(Thing:@space-verb, false);
