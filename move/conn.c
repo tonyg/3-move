@@ -20,6 +20,7 @@
 #include "conn.h"
 #include "vm.h"
 #include "thread.h"
+#include "gc.h"
 
 #if 0
 #define DEBUG
@@ -187,18 +188,33 @@ PRIVATE int conn_gets(BVECTOR buf, int offs, int size, OVECTOR conn) {
   return 0;	/* success. */
 }
 
+PRIVATE int nltrans_write(int fd, char *buf, int len) {
+  int i, j;
+  char *obuf = allocmem(sizeof(char) * len * 2);
+
+  for (i = 0, j = 0; i < len; i++) {
+    if (buf[i] == '\n')
+      obuf[j++] = '\r';
+    obuf[j++] = buf[i];
+  }
+
+  i = write(fd, obuf, j);
+  freemem(obuf);
+  return i;
+}
+
 PUBLIC int conn_write(const char *buf, int size, OVECTOR conn) {
   if (NUM(AT(conn, CO_TYPE)) != CONN_FILE)
     return CONN_RET_ERROR;
 
-  return write(NUM(AT(conn, CO_HANDLE)), buf, size);
+  return nltrans_write(NUM(AT(conn, CO_HANDLE)), buf, size);
 }
 
 PUBLIC int conn_puts(const char *s, OVECTOR conn) {
   if (NUM(AT(conn, CO_TYPE)) != CONN_FILE)
     return CONN_RET_ERROR;
 
-  return write(NUM(AT(conn, CO_HANDLE)), s, strlen(s));
+  return nltrans_write(NUM(AT(conn, CO_HANDLE)), s, strlen(s));
 }
 
 PUBLIC void conn_close(OVECTOR conn) {
