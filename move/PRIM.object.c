@@ -831,6 +831,22 @@ DEFPRIM(stripObjSFun) {
   return x;
 }
 
+DEFPRIM(clearSlotFun) {
+  OBJ x = ARG(0);
+  OBJ n = ARG(1);
+  OBJECT ox = (OBJECT) x;
+  OVECTOR name = (OVECTOR) n;
+
+  TYPEERRIF(!OBJECTP(x) || !(OVECTORP(n) && name->type == T_SYMBOL));
+
+  if (!O_CAN_W(ox, vms->r->vm_effuid)) {
+    NOPERMISSION();
+  }
+
+  delslot(ox, name);
+  return undefined;
+}
+
 PUBLIC void install_PRIM_object(void) {
   setup_ancestor();
 
@@ -873,4 +889,5 @@ PUBLIC void install_PRIM_object(void) {
   register_prim(1, "strip-object-clean", 0x04024, stripObjFun);
   register_prim(1, "strip-object-methods", 0x04025, stripObjMFun);
   register_prim(1, "strip-object-slots", 0x04026, stripObjSFun);
+  register_prim(2, "clear-slot", 0x04027, clearSlotFun);
 }
