@@ -108,13 +108,13 @@ PRIVATE void bind_number(PDATA p, int num, OBJ obj) {
 /***********************************************************************/
 
 PUBLIC void *start_save(FILE *dest) {
-  u32 version = (u32) htonl(DBFMT_BIG_32);
+  u32 version = (u32) htonl(DEFAULT_DBFMT);
   PDATA p = newpdata(dest);
 
   rewind(dest);
   fwrite(DBFMT_SIGNATURE, 1, DBFMT_SIG_LEN, dest);
   fwrite(&version, sizeof(u32), 1, dest);
-  p->db_version = DBFMT_BIG_32;
+  p->db_version = DEFAULT_DBFMT;
 
   return (void *) p;
 }
@@ -142,7 +142,7 @@ PUBLIC void save(void *handle, OBJ root) {
       fputc('S', p->f);
       fwrite(&val, sizeof(byte), 1, p->f);
     } else {
-      fprintf(stderr, "Invalid TAGGEDP object (%p) in save of DBFMT_BIG_32.\n", root);
+      fprintf(stderr, "Invalid TAGGEDP object (%p) in save of DEFAULT_DBFMT.\n", root);
       exit(MOVE_EXIT_DBFMT_ERROR);
     }
     
@@ -230,8 +230,10 @@ PUBLIC void *start_load(FILE *source) {
 
   if (!memcmp(DBFMT_SIGNATURE, sig, DBFMT_SIG_LEN)) {
     p->db_version = (u32) ntohl(version);
-  } else
+  } else {
     rewind(source);
+    p->db_version = DBFMT_OLDFMT;
+  }
 
   return (void *) p;
 }
@@ -347,7 +349,7 @@ PRIVATE OBJ load_OLDFMT(PDATA p) {
   return NULL;
 }
 
-PRIVATE OBJ load_BIG_32(PDATA p) {
+PRIVATE OBJ load_NET_32(PDATA p) {
   i32 n;
   char t;
 
@@ -406,13 +408,13 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
 	  obj->finalize = u & 1;
 	  obj->flags = u >> 1;
 
-	  obj->methods = (OVECTOR) load_BIG_32(p);
-	  obj->attributes = (OVECTOR) load_BIG_32(p);
-	  obj->parents = load_BIG_32(p);
-	  obj->owner = (OBJECT) load_BIG_32(p);
-	  obj->group = (VECTOR) load_BIG_32(p);
-	  obj->location = (OBJECT) load_BIG_32(p);
-	  obj->contents = (VECTOR) load_BIG_32(p);
+	  obj->methods = (OVECTOR) load_NET_32(p);
+	  obj->attributes = (OVECTOR) load_NET_32(p);
+	  obj->parents = load_NET_32(p);
+	  obj->owner = (OBJECT) load_NET_32(p);
+	  obj->group = (VECTOR) load_NET_32(p);
+	  obj->location = (OBJECT) load_NET_32(p);
+	  obj->contents = (VECTOR) load_NET_32(p);
 
 	  recmutex_init(&(obj->lock));
 	  return o;
@@ -439,13 +441,13 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
 
 	  if (obj->type == T_CONNECTION) {
 	    for (i = 0; i < u_length; i++) {
-	      ATPUT(obj, i, load_BIG_32(p));
+	      ATPUT(obj, i, load_NET_32(p));
 	      if (AT(obj, i) != NULL)
 		printf("  WARNING: conn[%d] == %p\n", i, AT(obj, i));
 	    }
 	  } else {
 	    for (i = 0; i < u_length; i++)
-	      ATPUT(obj, i, load_BIG_32(p));
+	      ATPUT(obj, i, load_NET_32(p));
 	  }
 
 	  return o;
@@ -458,7 +460,7 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
 	  bind_object(p, n, o);
 
 	  for (i = 0; i < u_length; i++)
-	    ATPUT((VECTOR) o, i, load_BIG_32(p));
+	    ATPUT((VECTOR) o, i, load_NET_32(p));
 
 	  return o;
 	}
@@ -466,7 +468,7 @@ PRIVATE OBJ load_BIG_32(PDATA p) {
     }
 
     default:
-      fprintf(stderr, "unknown type-char (%c (%d)) in load_BIG_32()!\n", t, t);
+      fprintf(stderr, "unknown type-char (%c (%d)) in load_NET_32()!\n", t, t);
       exit(MOVE_EXIT_DBFMT_ERROR);
   }
 
@@ -478,7 +480,9 @@ PUBLIC OBJ load(void *handle) {
 
   switch (p->db_version) {
     case DBFMT_OLDFMT: return load_OLDFMT(p);
-    case DBFMT_BIG_32: return load_BIG_32(p);
+    case DBFMT_BIG_32_OLD:
+    case DBFMT_NET_32:
+      return load_NET_32(p);
 
     default:
       fprintf(stderr, "Unrecognised database version. Sorry, I can't load that.\n");
@@ -486,4 +490,10 @@ PUBLIC OBJ load(void *handle) {
   }
 
   return NULL;
+}
+
+PUBLIC int get_handle_dbfmt(void *handle) {
+  PDATA p = (PDATA) handle;
+
+  return p->db_version;
 }
