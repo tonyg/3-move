@@ -58,7 +58,7 @@ extern BVECTOR bvector_concat(BVECTOR a, BVECTOR b);
 extern VECTOR vector_concat(VECTOR a, VECTOR b);
 
 extern void init_vm_global(void);
-extern void vm_restore_from(FILE *f);
+extern void vm_restore_from(FILE *f, int load_threads);
 extern void vm_poll_gc(void);
 extern void gc_reach_safepoint(void);
 

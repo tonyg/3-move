@@ -174,13 +174,13 @@ PRIVATE void siginthandler(int dummy) {
   exit(MOVE_EXIT_INTERRUPTED);
 }
 
-PRIVATE void import_db(char *filename) {
+PRIVATE void import_db(char *filename, int load_threads) {
   FILE *f = fopen(filename, "r");
 
   if (f == NULL)
     return;
 
-  vm_restore_from(f);
+  vm_restore_from(f, load_threads);
   fclose(f);
 }
 
@@ -220,7 +220,8 @@ PRIVATE void write_pid(void) {
 PUBLIC int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr,
-	    "Usage: move <dbfilename> [<move-source-code-file> ...]\n");
+	    "Usage: move [-t] <dbfilename> [<move-source-code-file> ...]\n"
+	    "\t-t\tInhibits loading threads which were active when the DB was saved\n");
     exit(MOVE_EXIT_ERROR);
   }
 
@@ -238,7 +239,19 @@ PUBLIC int main(int argc, char *argv[]) {
   checkpoint_filename = "move.checkpoint";
 
   install_primitives();
-  import_db(argv[1]);
+
+  {
+    int load_threads = 1;
+
+    if (!strcmp(argv[1], "-t")) {
+      load_threads = 0;
+      argv++;
+      argc--;
+    }
+
+    import_db(argv[1], load_threads);
+  }
+
   bind_primitives_to_symbols();
 
   import_cmdline_files(argc - 2, argv + 2);

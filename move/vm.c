@@ -212,11 +212,12 @@ PUBLIC void init_vm_global(void) {
   checkpoint_suffix = 0;
 }
 
-PUBLIC void vm_restore_from(FILE *f) {
+PUBLIC void vm_restore_from(FILE *f, int load_threads) {
   void *handle = start_load(f);
 
   symtab = (VECTOR) load(handle);
-  load_restartable_threads(handle, f);
+  if (load_threads)
+    load_restartable_threads(handle, f);
 
   end_load(handle);
 }
