@@ -16,7 +16,28 @@
 
 /***************************************************************************/
 
+typedef struct ParseInst {
+  VMSTATE vms;
+  SCANINST scaninst;
+  int need_scan;
+  int scan_result;
+  int was_close_brace;
+} ParseInst, *PARSEINST;
+
+/***************************************************************************/
+
+PRIVATE void stuff_token(PARSEINST p_i, int class) {
+  p_i->scan_result = class;
+  p_i->need_scan = 0;
+}
+
 PRIVATE int check(PARSEINST p_i, int class) {
+  if (p_i->was_close_brace && class == ';') {
+    p_i->was_close_brace = 0;
+    stuff_token(p_i, ';');
+    return 1;
+  }
+
   if (p_i->need_scan) {
     p_i->scan_result = scan(p_i->scaninst);
     p_i->need_scan = 0;
@@ -25,25 +46,17 @@ PRIVATE int check(PARSEINST p_i, int class) {
   return class == p_i->scan_result;
 }
 
-PRIVATE void stuff_token(PARSEINST p_i, int class) {
-  p_i->scan_result = class;
-  p_i->need_scan = 0;
-}
-
 PRIVATE void drop(PARSEINST p_i) {
   if (p_i->need_scan)
     p_i->scan_result = scan(p_i->scaninst);
-  else if (p_i->scan_result == '}') {
-    stuff_token(p_i, ';');
-    return;
-  }
 
+  p_i->was_close_brace = (p_i->scan_result == '}');
   p_i->need_scan = 1;
 }
 
 /***************************************************************************/
 
-PRIVATE VECTOR list_to_vector(VECTOR l) {
+PUBLIC VECTOR list_to_vector(VECTOR l) {
   int len = 0, i;
   VECTOR t, n;
 
@@ -186,10 +199,14 @@ PRIVATE void patch16(CODE c, u16 o, u16 w) {
 #define CHECK(class)		check(code->parseinst, class)
 #define DROP()			drop(code->parseinst)
 
-#define ERR(msg)		{vm_raise(code->parseinst->vms, \
+#define ERR(msg)		{char ERRbuf_[256]; \
+				 sprintf(ERRbuf_, "%d: %s", \
+					 code->parseinst->scaninst->linenum, \
+					 msg); \
+				 vm_raise(code->parseinst->vms, \
 					  (OBJ) newsym("parse-error"), \
-					  (OBJ) newstring(msg)); \
-				return 0;}
+					  (OBJ) newstring(ERRbuf_)); \
+				 return 0;}
 
 #define CHKERR(class, msg)	if (!check(code->parseinst, class)) ERR(msg)
 
@@ -232,6 +249,8 @@ PRIVATE int compile_methodreference(CODE code, int asmethod) {
   if (CHECK('(')) { 
     int argc = 0;
     u16 pos, argcloc;
+
+    DROP();
 
     gen(code, OP_PUSH);	/* save away the object the method is on */
 
@@ -1071,6 +1090,7 @@ PRIVATE int expr_parse(CODE code) {
 	if (!expr_parse(code))
 	  return 0;
       } else {
+	printf("yes"); fflush(stdout);
 	stuff_token(code->parseinst, ';');
 	gen(code, OP_MOV_A_LITL);
 	GEN_LIT(code, undefined);
@@ -1214,6 +1234,7 @@ PUBLIC OVECTOR parse(VMSTATE vms, SCANINST scaninst) {
   p_i.scaninst = scaninst;
   p_i.need_scan = 1;
   p_i.scan_result = 0;
+  p_i.was_close_brace = 0;
 
   if (CHECK(SCAN_EOF) || !expr_parse(code)) {
     killcode(code);
