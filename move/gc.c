@@ -194,8 +194,15 @@ PRIVATE void mark(OBJ x) {
       OVECTOR ox = (OVECTOR) x;
       int i;
 
-      for (i = 0; i < x->length; i++)
-	mark(AT(ox, i));
+      if (ox->type == T_SYMBOL) {
+	for (i = 0; i < x->length; i++)
+	  if (i != SY_NEXT)
+	    mark(AT(ox, i));
+      } else {
+	for (i = 0; i < x->length; i++)
+	  mark(AT(ox, i));
+      }
+
       break;
     }
 
@@ -233,6 +240,24 @@ PUBLIC void gc(void) {
     r = r->next;
   }
 
+  {
+    int i;
+
+    symtab->_.marked = 1;
+    for (i = 0; i < symtab->_.length; i++) {
+      OVECTOR curr = (OVECTOR) AT(symtab, i);
+
+      while (curr != NULL) {
+	if (!curr->_.marked && AT(curr, SY_VALUE) != undefined)
+	  mark((OBJ) curr);
+
+	curr = (OVECTOR) AT(curr, SY_NEXT);
+      }
+
+      ATPUT(symtab, i, NULL);
+    }
+  }
+
   x = all_objects;
   all_objects = NULL;
   curr_heapsize = 0;
@@ -253,6 +278,13 @@ PUBLIC void gc(void) {
 	free(x);
       }
     } else {
+      if (OVECTORP(x) && ((OVECTOR) x)->type == T_SYMBOL) {
+	OVECTOR sym = (OVECTOR) x;
+	u32 h = UNUM(AT(sym, SY_HASH)) % symtab->_.length;
+	ATPUT(sym, SY_NEXT, AT(symtab, h));
+	ATPUT(symtab, h, x);
+      }
+
       x->marked = 0;
       x->next = all_objects;
       all_objects = x;
