@@ -280,7 +280,7 @@ PUBLIC void gc(void) {
     } else {
       if (OVECTORP(x) && ((OVECTOR) x)->type == T_SYMBOL) {
 	OVECTOR sym = (OVECTOR) x;
-	u32 h = UNUM(AT(sym, SY_HASH)) % symtab->_.length;
+	unum h = UNUM(AT(sym, SY_HASH)) % symtab->_.length;
 	ATPUT(sym, SY_NEXT, AT(symtab, h));
 	ATPUT(symtab, h, x);
       }
@@ -347,7 +347,7 @@ PUBLIC void *allocmem(int size) {
   ptr = malloc(size);
   pthread_mutex_unlock(&heap_mutex);
 
-  if (ptr == NULL) {
+  if (ptr == NULL && size > 0) {
     fprintf(stderr, "fatal error: malloc returned NULL, size == %d\n", size);
     exit(1);
   }
