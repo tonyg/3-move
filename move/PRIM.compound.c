@@ -11,8 +11,7 @@
 #include <string.h>
 #include <ctype.h>
 
-#define DEFPRIM(name)	PRIVATE OBJ name(VMSTATE vms, VECTOR argvec)
-#define ARG(n)		AT(argvec, (n)+1)
+#define ALLOW_MUTABLE_STRINGS 0
 
 PRIVATE pthread_mutex_t general_ht_lock;
 
@@ -87,7 +86,12 @@ DEFPRIM(eltSet) {
       return undefined;
     }
 
+#if ALLOW_MUTABLE_STRINGS
     ATPUT((BVECTOR) x, NUM(i), AT((BVECTOR) v, 0));
+#else
+    vm_raise(vms, (OBJ) newsym("mutable-strings-disallowed"), (OBJ) argvec);
+    return undefined;
+#endif
   }
 
   return v;
@@ -408,7 +412,7 @@ PUBLIC void install_PRIM_compound(void) {
   register_prim("tolower", 0x0100E, tolowerFun);
   register_prim("make-hashtable", 0x0100F, makeHTFun);
   register_prim("all-keys", 0x01010, allKeysFun);
-  register_prim("as-symbol", 0x01011, asSymFun);
+  register_prim("as-sym", 0x01011, asSymFun);
   register_prim("copy-of", 0x01012, copyOfFun);
 }
 

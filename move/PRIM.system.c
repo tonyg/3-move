@@ -64,7 +64,10 @@ DEFPRIM(setEffuid) {
   if (!PRIVILEGEDP(vms->r->vm_effuid))
     return false;
 
-  vms->r->vm_effuid = (OBJECT) u;
+  if (vms->r->vm_frame == NULL)
+    return false;
+
+  ATPUT(vms->r->vm_frame, FR_EFFUID, (OBJ) u);
   return true;
 }
 

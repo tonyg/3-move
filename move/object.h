@@ -219,7 +219,8 @@ typedef struct OVector {
 #define LOCK(o)		(recmutex_lock(&((o)->lock)))
 #define UNLOCK(o)	(recmutex_unlock(&((o)->lock)))
 
-extern VECTOR symtab;	/* for use by checkpoint_now() in vm.c */
+extern VECTOR symtab;	/* for use by checkpoint_now() in vm.c
+			   and the garbage collector in gc.c */
 
 extern void init_object(void);
 

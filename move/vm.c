@@ -138,7 +138,7 @@ PUBLIC INLINE void apply_closure(VMSTATE vms, OVECTOR closure, VECTOR argvec) {
 #define INSTR2(n)	printf(n "%d %d", c[ip+1], c[ip+2]); ip+=3; break
 #define INSTR16(n)	printf(n "%d", (i16) ((int)c[ip+1]*256 + c[ip+2])); ip+=3; break
 PRIVATE void debug_dump_instr(byte *c, int ip) {
-  printf("%04d ", ip);
+  printf("%ld %04d ", pthread_self(), ip);
 
   switch (c[ip]) {
     case OP_AT:			INSTR1("AT      ");

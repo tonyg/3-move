@@ -23,7 +23,8 @@ PRIVATE Obj zero_vector;
 PUBLIC void init_object(void) {
   pthread_mutex_init(&symtab_mutex, NULL);
   symtab = newvector(SYMTAB_SIZE);
-  protect((OBJ *) &symtab);
+
+  /* protect((OBJ *) &symtab); NOT NECESSARY NOW THAT SYMBOL TABLE IS SPECIALLY SWEPT */
 
   zero_vector.next = NULL;
   zero_vector.kind = KIND_VECTOR;
@@ -163,7 +164,7 @@ PUBLIC unsigned long hash_str(char *string) {
 }
 
 PUBLIC OVECTOR newsym(char *name) {
-  u32 rawhash = hash_str(name);
+  u32 rawhash = UNUM(MKNUM(hash_str(name)));
   u32 h = rawhash % SYMTAB_SIZE;
   OVECTOR sym;
 
