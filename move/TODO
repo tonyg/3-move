@@ -1,0 +1,39 @@
+Important goals (accomplish ASAP):
+
+	add in safety fork()s in the database code, esp. in things like
+	Program:compile() and the evaluator of mud expressions.
+
+	checkpoints still a bit funny, esp. with bg checkpoints and many threads.
+	checkpoints lock up real easy on the Alpha. (2 processors?)
+
+	add in Player.last-login-time and Player.last-action-time for computing
+	idle-time and login time.
+
+	add statistics for various things:
+	  - measure GC performance
+	  - measure symbol-table density
+
+	add a logging facility (format printfs prettily)
+	  - this involves rewriting the DEBUG stuff so that
+	    there are separate debug streams, controllable individually
+	    (pref. from a separate module). Then, you see, you can
+	    cat all log messages straight to stdout, formatted appropriately
+	    for debug or routine log messages.
+
+	new verb parser needed urgently
+
+	object numbers for the UI
+
+	generational GC
+
+Less important goals (accomplish at leisure):
+
+	distributed MOVE
+
+	equal?() doesn't compare vectors at all. Add in a few more supported
+	types...
+
+	clean up #includes to avoid unnecessary interdependence
+
+	256-limited opcodes are too limited. Escape to 16-bit?
+	finalizer thread -> user level (there's no need for it yet, fortunately...)
