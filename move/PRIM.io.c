@@ -4,6 +4,7 @@
 #include "prim.h"
 #include "scanner.h"
 #include "conn.h"
+#include "PRIM.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -15,13 +16,6 @@
 
 #include <unistd.h>
 #include <fcntl.h>
-
-#define TYPEERRIF(c)	if (c) { \
-			  vm_raise(vms, (OBJ) newsym("type-error"), (OBJ) argvec); \
-			  return undefined; \
-			}
-#define DEFPRIM(name)	PRIVATE OBJ name(VMSTATE vms, VECTOR argvec)
-#define ARG(n)		AT(argvec, (n)+1)
 
 PRIVATE OBJ getPrintString(VMSTATE, VECTOR); /* prototype */
 
