@@ -371,7 +371,7 @@ PUBLIC void block_until_event(void) {
   tv.tv_sec = nearest_alarm_time - time_now;
   tv.tv_usec = 0;
 
-  if (select(sel_n, &set, NULL, &set, &tv) < 0) {
+  if (select(sel_n, &set, NULL, &set, nearest_alarm_time ? &tv : NULL) < 0) {
     int e = errno;
 
     if (e != EAGAIN) {
