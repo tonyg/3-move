@@ -80,6 +80,7 @@ define function pronoun-sub(str, who) {
 
   str;
 }
+set-setuid(pronoun-sub, true);
 
 // editor(text)
 //
