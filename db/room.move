@@ -87,7 +87,7 @@ define method (Room) del-exit(ex) {
   return idx && true;	// just to make it return either "true" _or_ "false".
 }
 
-define method (Room) pre-accept(x) true;
+define method (Room) pre-accept(x, oldloc) true;
 make-method-overridable(Room:pre-accept, true);
 
 define method (Room) post-accept(x, oldloc) {
@@ -96,16 +96,6 @@ define method (Room) post-accept(x, oldloc) {
   true;
 }
 make-method-overridable(Room:post-accept, true);
-
-define method (Room) announce(x) this:announce-except(realuid(), x);
-
-define method (Room) announce-all(x)
-  for-each(function (o) o:mtell(x), contents(this));
-make-method-overridable(Room:announce-all, true);
-
-define method (Room) announce-except(who, x)
-  for-each(function (o) if (o != who) o:mtell(x), contents(this));
-make-method-overridable(Room:announce-except, true);
 
 define method (Room) match-verb(sent) {
   define result = as(Thing):match-verb(sent);
