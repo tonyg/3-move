@@ -188,7 +188,7 @@ PRIVATE int conn_gets(BVECTOR buf, int offs, int size, OVECTOR conn) {
   return 0;	/* success. */
 }
 
-PRIVATE int nltrans_write(int fd, char *buf, int len) {
+PRIVATE int nltrans_write(int fd, char const *buf, int len) {
   int i, j;
   char *obuf = allocmem(sizeof(char) * len * 2);
 

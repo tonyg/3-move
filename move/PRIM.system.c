@@ -1,13 +1,13 @@
 #include "global.h"
 #include "object.h"
 #include "vm.h"
+#define DEFINING_MOVE_PRIMITIVES
 #include "prim.h"
 #include "scanner.h"
 #include "parser.h"
 #include "conn.h"
 #include "perms.h"
 #include "thread.h"
-#include "PRIM.h"
 
 #include <stdlib.h>
 #include <stdio.h>

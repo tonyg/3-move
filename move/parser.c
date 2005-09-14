@@ -405,12 +405,14 @@ PRIVATE int applic_parse(CODE code, OVECTOR currid, int lvalue, int isslot) {
       break;
     }
 
-    if (lvalue)
+    if (lvalue) {
       if (isslot) {
 	gen(code, OP_MOV_A_SLOT);
 	GEN_LIT(code, currid);
-      } else
+      } else {
 	compile_varref(code, currid);
+      }
+    }
 
     lvalue = isslot = 0;
 
