@@ -273,6 +273,20 @@ define method (Thing) space() {
   return true;
 }
 
+define method (Thing) set-cloneable(val) {
+  if (caller-effuid() != owner(this) && !privileged?(caller-effuid()))
+    return false;
+
+  define fl = object-flags(this);
+  if (val) {
+    fl = fl | O_C_FLAG;
+  } else {
+    fl = fl & ~O_C_FLAG;
+  }
+  set-object-flags(this, fl);
+  true;
+}
+
 ////////////////////////////////////////////////////////////////////////////
 // VERBS
 
@@ -453,6 +467,19 @@ define method (Thing) @dispose-verb(b) {
 }
 set-setuid(Thing:@dispose-verb, false);
 Thing:add-verb(#obj, #@dispose-verb, ["@dispose ", #obj]);
+
+define method (Thing) @setcloneable-verb(b) {
+  define val = b[#yes/no/true/false][0];
+  define ptell = realuid():tell;
+
+  val = !(equal?(val, "no") || equal?(val, "false"));
+  if (this:set-cloneable(val))
+    ptell("Your @setcloneable operation for " + this.name + " succeeded.\n");
+  else
+    ptell("Your @setcloneable operation for " + this.name + " failed.\n");
+}
+set-setuid(Thing:@setcloneable-verb, false);
+Thing:add-verb(#obj, #@setcloneable-verb, ["@setcloneable ", #obj, " to ", #yes/no/true/false]);
 
 checkpoint();
 shutdown();
