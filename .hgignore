@@ -1,7 +1,3 @@
-(^|/)CVS($|/)
-(^|/)\.hg($|/)
-(^|/)\.hgtags($|/)
-^project.log$
-^tailor.state$
-^tailor.state.old$
-^tailor.state.journal$
+\.o$
+^move/move$
+^tricks/checkpoint-cleanup$
