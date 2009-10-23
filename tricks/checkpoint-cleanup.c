@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <sys/types.h>
 #include <dirent.h>
 
 #define MINDELAY 10
@@ -43,7 +44,10 @@ static void cleanup(int keepnum) {
   struct dirent **list;
   int i, n;
 
-  n = scandir(".", &list, selector, sorter);
+  n = scandir(".",
+	      &list,
+	      (int (*)(struct dirent *)) selector,
+	      (int (*)(void const *, void const *)) sorter);
 
   if (n > keepnum) {
     for (i = 0; i < n - keepnum; i++) {

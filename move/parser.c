@@ -843,7 +843,7 @@ PRIVATE OVECTOR compile_template(CODE code, int argc) {
 
   gen(code, OP_RET);
 
-  template = newcompilertemplate(argc, code->buf->buf, code->buf->pos,
+  template = newcompilertemplate(argc, (byte *) code->buf->buf, code->buf->pos,
 				 list_to_vector(code->littab));
 
   code->littab = olittab;
@@ -1253,7 +1253,7 @@ PUBLIC OVECTOR parse(VMSTATE vms, SCANINST scaninst) {
 
   gen(code, OP_RET);
 
-  template = newcompilertemplate(0, code->buf->buf, code->buf->pos,
+  template = newcompilertemplate(0, (byte *) code->buf->buf, code->buf->pos,
 				 list_to_vector(code->littab));
   killcode(code);
   return template;

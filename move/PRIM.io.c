@@ -120,7 +120,7 @@ DEFPRIM(printOn) {
 
   TYPEERRIF(!OVECTORP(conn) || ((OVECTOR) conn)->type != T_CONNECTION || !BVECTORP(val));
 
-  conn_write(((BVECTOR) val)->vec, val->length, (OVECTOR) conn);
+  conn_write((char const *) ((BVECTOR) val)->vec, val->length, (OVECTOR) conn);
   return undefined;
 }
 

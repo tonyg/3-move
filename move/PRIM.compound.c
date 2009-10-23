@@ -224,27 +224,27 @@ DEFPRIM(indexOfFun) {
   }
 }
 
-PRIVATE char *strSearchAux(char *v1, int n1, char *v2, int n2) {
+PRIVATE byte const *strSearchAux(byte const *v1, int n1, byte const *v2, int n2) {
   int i;
 
   if (n2 == 0)
     return v1;
 
   for (i = 0; i < (n1 - n2) + 1; i++)
-    if (!strncmp(&v1[i], v2, n2))
+    if (!strncmp((char const *) &v1[i], (char const *) v2, n2))
       return &v1[i];
 
   return NULL;
 }
 
-PRIVATE char *strSearchAuxCI(char *v1, int n1, char *v2, int n2) {
+PRIVATE byte const *strSearchAuxCI(byte const *v1, int n1, byte const *v2, int n2) {
   int i;
 
   if (n2 == 0)
     return v1;
 
   for (i = 0; i < (n1 - n2) + 1; i++)
-    if (!strncasecmp(&v1[i], v2, n2))
+    if (!strncasecmp((char const *) &v1[i], (char const *) v2, n2))
       return &v1[i];
 
   return NULL;
@@ -253,7 +253,7 @@ PRIVATE char *strSearchAuxCI(char *v1, int n1, char *v2, int n2) {
 PRIVATE OBJ strSearchBody(VMSTATE vms, VECTOR argvec, int case_matters) {
   OBJ str = ARG(0);
   OBJ pat = ARG(1);
-  byte *pos;
+  byte const *pos;
 
   TYPEERRIF(!BVECTORP(str) || !BVECTORP(pat));
 
@@ -284,7 +284,7 @@ DEFPRIM(strReplace) {
   OBJ rep = ARG(2);
   BUFFER dest = newbuf(0);
   BVECTOR result;
-  char *source, *what, *with;
+  byte *source, *what, *with;
   int source_length, what_length, with_length;
   int si, wi;
 
@@ -421,7 +421,7 @@ DEFPRIM(asSymFun) {
   BVECTOR cname;
   TYPEERRIF(!BVECTORP(x));
   cname = bvector_concat((BVECTOR) x, newbvector(1));
-  return (OBJ) newsym(cname->vec);
+  return (OBJ) newsym((char *) cname->vec);
 }
 
 DEFPRIM(copyOfFun) {

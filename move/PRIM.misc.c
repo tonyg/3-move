@@ -135,7 +135,9 @@ DEFPRIM(equalPFun) {
 
   if (BVECTORP(a) && BVECTORP(b))
     return (a->length == b->length &&
-	    !strncasecmp(((BVECTOR) a)->vec, ((BVECTOR) b)->vec, a->length)) ? true : false;
+	    !strncasecmp((char const *) ((BVECTOR) a)->vec,
+			 (char const *) ((BVECTOR) b)->vec,
+			 a->length)) ? true : false;
 
   return a == b ? true : false;
 }

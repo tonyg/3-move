@@ -156,7 +156,7 @@ PRIVATE int nullconn_getter(void *arg) {
 			      CONN_RET_ERROR)
 
 PRIVATE int conn_gets(BVECTOR buf, int offs, int size, OVECTOR conn) {
-  char *s = buf->vec + offs;
+  byte *s = buf->vec + offs;
   int c;
 
   if (conn_closed(conn))
@@ -297,7 +297,7 @@ PUBLIC int conn_resume_readline(VECTOR args) {
 
     default:
       unblock_thread(current_thread);
-      current_thread->vms->r->vm_acc = (OBJ) newstring(((BVECTOR) AT(args, 0))->vec);
+      current_thread->vms->r->vm_acc = (OBJ) newstring((char *) ((BVECTOR) AT(args, 0))->vec);
       break;
   }
 
@@ -307,7 +307,7 @@ PUBLIC int conn_resume_readline(VECTOR args) {
 PUBLIC int conn_resume_accept(OVECTOR server) {
   int fd;
   struct sockaddr_in addr;
-  int addrlen;
+  socklen_t addrlen;
 
   fd = NUM(AT(server, CO_HANDLE));
   fd = accept(fd, (struct sockaddr *) &addr, &addrlen);

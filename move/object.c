@@ -187,7 +187,7 @@ PUBLIC OVECTOR newsym(char *name) {
   while (sym != NULL) {
     BVECTOR symname = (BVECTOR) AT(sym, SY_NAME);
 
-    if (!strncmp(symname->vec, name, symname->_.length)) {
+    if (!strncmp((char *) symname->vec, name, symname->_.length)) {
       return sym;
     }
 
