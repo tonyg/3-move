@@ -33,13 +33,11 @@ LIBS =
 
 all: $(TARGET)
 
-fullclean: clean
-	$(DELETE) $(TARGET)
-
 clean:
+	$(DELETE) $(TARGET)
 	$(DELETE) $(objects) *~
 
-distrib: fullclean
+distrib: clean
 	(pushd .. ; \
 	 tar --exclude RCS --exclude OOM --exclude .emacs.desktop --exclude .gdbinit \
 		-cvf move.tar move ; \
