@@ -13,6 +13,46 @@ the world, scripted with behaviours provided by the users
 themselves. A simple extensible adventure-game-like command parser
 lets users add to the vocabulary of commands understood by the system.
 
+## Features
+
+The world server:
+
+ - Persistent object-oriented database.
+ - Programming language, compiler, and standard library.
+ - 32- and 64-bit support (originally for alphas!).
+ - Stable, platform-neutral database format; support for database upgrades.
+ - Simple security model (like many other aspects of the system, inspired by MOO).
+ - Precise mark-sweep non-compacting GC.
+ - Event-driven I/O.
+
+The language, MOVE:
+
+ - Prototype-based object-oriented language. Each object can have zero or more parents.
+ - Each object has two namespaces: one for methods, one for instance variables.
+ - First-class functions (lambdas). Closures. Higher-order standard library functions (map, etc.).
+ - First-class continuations.
+ - First-class preemptive green threads.
+ - Integration of language features with VM's security model.
+
+The world database:
+
+ - User-level names for objects are expressed in terms of the scope
+   implied by the user's current location, possessions etc.
+
+ - Programmer-level names for objects are expressed in terms of
+   explicit indexes (the Object Registry) and normal lexical scoping.
+
+ - The world's modelling of locations, containers, players, exits, and
+   inter-player communication is heavily inspired by LambdaMOO.
+
+ - The command parser is entirely written in MOVE.
+
+ - Control over listening-sockets and connected-sockets is entirely
+   done by database-level MOVE code. Threads and connections are
+   stored in the database, like any other object.
+
+ - A simple line editor subroutine is provided, implemented in MOVE.
+
 ## Source code layout
 
 There are three directories here:
