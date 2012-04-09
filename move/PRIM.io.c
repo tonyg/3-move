@@ -221,6 +221,12 @@ DEFPRIM(listenConnection) {
   if (sock == -1)
     return (OBJ) newsym("socket-creation-failed");
 
+  {
+    int v = 1;
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(v)) == -1)
+      return (OBJ) newsym("setsockopt-failed");
+  }
+
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
   addr.sin_port = htons(NUM(port));
