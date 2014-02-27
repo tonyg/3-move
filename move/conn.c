@@ -307,7 +307,7 @@ PUBLIC int conn_resume_readline(VECTOR args) {
 PUBLIC int conn_resume_accept(OVECTOR server) {
   int fd;
   struct sockaddr_in addr;
-  socklen_t addrlen;
+  socklen_t addrlen = sizeof(addr);
 
   fd = NUM(AT(server, CO_HANDLE));
   fd = accept(fd, (struct sockaddr *) &addr, &addrlen);
