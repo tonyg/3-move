@@ -856,7 +856,8 @@ PRIVATE OVECTOR compile_template(CODE code, int argc) {
 PRIVATE int expr_parse(CODE code) {
   if (CHECK(K_DEFINE)) {
     OVECTOR name;
-    uint16_t frame, offset;
+    uint16_t frame = 0;
+    uint16_t offset = 0;
 
     DROP();
 
