@@ -238,8 +238,10 @@ PRIVATE void write_pid(void) {
 PUBLIC int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr,
+	    "3-MOVE (%d-bit mode; main.o compiled on " __DATE__ " at " __TIME__ ")\n"
 	    "Usage: move [-t] <dbfilename> [<move-source-code-file> ...]\n"
-	    "\t-t\tInhibits loading threads which were active when the DB was saved\n");
+	    "\t-t\tInhibits loading threads which were active when the DB was saved\n",
+	    (int) sizeof(word) * 8);
     exit(MOVE_EXIT_ERROR);
   }
 
