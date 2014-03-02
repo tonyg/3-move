@@ -42,4 +42,7 @@ extern OBJ load(void *handle);
 
 extern int get_handle_dbfmt(void *handle);
 
+/* Used by thread.c during loading: */
+extern void checked_fread(void *ptr, size_t size, size_t nmemb, FILE *stream);
+
 #endif

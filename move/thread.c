@@ -485,7 +485,7 @@ PUBLIC void load_restartable_threads(void *phandle, FILE *f) {
   while (1) {
     VMSTATE vms;
 
-    fread(&i, sizeof(int), 1, f);
+    checked_fread(&i, sizeof(int), 1, f);
     if (use_net_byte_ordering)
       i = ntohl(i);
 
@@ -497,7 +497,7 @@ PUBLIC void load_restartable_threads(void *phandle, FILE *f) {
 
     printf("loading thread %d...\n", i);
     vms = allocmem(sizeof(VMstate));
-    fread(&vms->c, sizeof(VMregs_C), 1, f);
+    checked_fread(&vms->c, sizeof(VMregs_C), 1, f);
     if (use_net_byte_ordering) {
       vms->c.vm_ip = ntohl(vms->c.vm_ip);
       vms->c.vm_top = ntohl(vms->c.vm_top);
