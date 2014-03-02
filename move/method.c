@@ -25,7 +25,7 @@
 #include "hashtable.h"
 #include "method.h"
 
-PUBLIC OVECTOR newcompilertemplate(int argc, byte *code, int codelen, VECTOR littab) {
+PUBLIC OVECTOR newcompilertemplate(int argc, uint8_t *code, int codelen, VECTOR littab) {
   OVECTOR s = newovector(ME_MAXSLOTINDEX, T_METHOD);
   BVECTOR b = newbvector_noinit(codelen);
 

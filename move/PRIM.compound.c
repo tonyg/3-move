@@ -206,7 +206,7 @@ DEFPRIM(indexOfFun) {
   TYPEERRIF(!((BVECTORP(x) && BVECTORP(v)) || VECTORP(x)));
 
   if (BVECTORP(x)) {
-    byte *loc = memchr(((BVECTOR) x)->vec, AT((BVECTOR) v, 0), x->length);
+    uint8_t *loc = memchr(((BVECTOR) x)->vec, AT((BVECTOR) v, 0), x->length);
 
     if (loc == NULL)
       return false;
@@ -224,7 +224,7 @@ DEFPRIM(indexOfFun) {
   }
 }
 
-PRIVATE byte const *strSearchAux(byte const *v1, int n1, byte const *v2, int n2) {
+PRIVATE uint8_t const *strSearchAux(uint8_t const *v1, int n1, uint8_t const *v2, int n2) {
   int i;
 
   if (n2 == 0)
@@ -237,7 +237,7 @@ PRIVATE byte const *strSearchAux(byte const *v1, int n1, byte const *v2, int n2)
   return NULL;
 }
 
-PRIVATE byte const *strSearchAuxCI(byte const *v1, int n1, byte const *v2, int n2) {
+PRIVATE uint8_t const *strSearchAuxCI(uint8_t const *v1, int n1, uint8_t const *v2, int n2) {
   int i;
 
   if (n2 == 0)
@@ -253,7 +253,7 @@ PRIVATE byte const *strSearchAuxCI(byte const *v1, int n1, byte const *v2, int n
 PRIVATE OBJ strSearchBody(VMSTATE vms, VECTOR argvec, int case_matters) {
   OBJ str = ARG(0);
   OBJ pat = ARG(1);
-  byte const *pos;
+  uint8_t const *pos;
 
   TYPEERRIF(!BVECTORP(str) || !BVECTORP(pat));
 
@@ -284,7 +284,7 @@ DEFPRIM(strReplace) {
   OBJ rep = ARG(2);
   BUFFER dest = newbuf(0);
   BVECTOR result;
-  byte *source, *what, *with;
+  uint8_t *source, *what, *with;
   int source_length, what_length, with_length;
   int si, wi;
 

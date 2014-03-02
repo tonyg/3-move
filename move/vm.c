@@ -43,7 +43,7 @@
 #define VMSTACKLENGTH	1024
 
 #define CODEAT(i)	AT(vms->r->vm_code, i)
-#define CODE16AT(i)	(((u16) CODEAT(i) << 8) | (u16) CODEAT((i)+1))
+#define CODE16AT(i)	(((uint16_t) CODEAT(i) << 8) | (uint16_t) CODEAT((i)+1))
 
 #define PUSH(o)		push(vms, o)
 #define POP()		pop(vms)
@@ -73,7 +73,7 @@ PRIVATE INLINE OBJ peek(VMSTATE vms) {
   return AT(vms->r->vm_stack, vms->c.vm_top - 1);
 }
 
-PRIVATE INLINE void fillframe(VMSTATE vms, OVECTOR f, u32 newip) {
+PRIVATE INLINE void fillframe(VMSTATE vms, OVECTOR f, uint32_t newip) {
   ATPUT(f, FR_CODE, (OBJ) vms->r->vm_code);
   ATPUT(f, FR_IP, MKNUM(newip));
   ATPUT(f, FR_SELF, (OBJ) vms->r->vm_self);
@@ -221,7 +221,7 @@ PRIVATE void debug_dump_instr(byte *c, int ip) {
 /* Public parts								*/
 
 PUBLIC char *checkpoint_filename;
-PUBLIC u32 synch_bitmap;
+PUBLIC uint32_t synch_bitmap;
 PRIVATE int checkpoint_suffix;
 
 PUBLIC void init_vm_global(void) {
@@ -755,16 +755,16 @@ PUBLIC int run_vm(VMSTATE vms) {
 	apply_closure(vms, (OVECTOR) vms->r->vm_acc, (VECTOR) POP());
 	break;
 
-      case OP_JUMP: vms->c.vm_ip += 3 + ((i16) CODE16AT(vms->c.vm_ip+1)); break;
+      case OP_JUMP: vms->c.vm_ip += 3 + ((int16_t) CODE16AT(vms->c.vm_ip+1)); break;
 
       case OP_JUMP_TRUE:
 	vms->c.vm_ip += (vms->r->vm_acc == false) ? 3 :
-						    3 + ((i16) CODE16AT(vms->c.vm_ip+1));
+						    3 + ((int16_t) CODE16AT(vms->c.vm_ip+1));
 	break;
 
       case OP_JUMP_FALSE:
 	vms->c.vm_ip += (vms->r->vm_acc != false) ? 3 :
-						    3 + ((i16) CODE16AT(vms->c.vm_ip+1));
+						    3 + ((int16_t) CODE16AT(vms->c.vm_ip+1));
 	break;
 
       case OP_NOT:

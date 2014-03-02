@@ -151,21 +151,21 @@ PRIVATE VECTOR vec_append(VECTOR vec, OBJ item) {
   return n;
 }
 
-PRIVATE u16 add_binding(CODE code, OVECTOR name) {
+PRIVATE uint16_t add_binding(CODE code, OVECTOR name) {
   SETCAR(code->scope, (OBJ) vec_append((VECTOR) CAR(code->scope), (OBJ) name));
-  return (u16) ((VECTOR) CAR(code->scope))->_.length - 1;
+  return (uint16_t) ((VECTOR) CAR(code->scope))->_.length - 1;
 }
 
-PRIVATE int lookup(CODE code, OVECTOR name, u16 *frame, u16 *offset) {
+PRIVATE int lookup(CODE code, OVECTOR name, uint16_t *frame, uint16_t *offset) {
   VECTOR currcell;
-  u16 frameno;
+  uint16_t frameno;
 
   currcell = code->scope;
   frameno = 0;
 	
   while (currcell != NULL) {
     VECTOR currframe = (VECTOR) CAR(currcell);
-    u16 i;
+    uint16_t i;
 
     for (i = 0; i < currframe->_.length; i++)
       if (AT(currframe, i) == (OBJ) name) {
@@ -211,18 +211,18 @@ PRIVATE char get_lit(CODE code, OBJ lit) {
 #define gen(c, ch)		buf_append((c)->buf, (char) (ch))
 #define patch(c, o, ch)		(c)->buf->buf[(o)] = (ch)
 
-PRIVATE void gen16(CODE c, u16 w) {
+PRIVATE void gen16(CODE c, uint16_t w) {
 	gen(c, (w >> 8) & 0xFF);
 	gen(c, w & 0xFF);
 }
 
-PRIVATE void patch16(CODE c, u16 o, u16 w) {
+PRIVATE void patch16(CODE c, uint16_t o, uint16_t w) {
 	patch(c, o, (w >> 8) & 0xFF);
 	patch(c, o + 1, w & 0xFF);
 }
 
 #define JUMP_HERE_FROM(code, ip)	patch16(code, ip, CURPOS(code) - ip - 2)
-#define GEN_JUMP_TO(code, b, ip)	{u16 __pos__;gen(code,b);__pos__=CURPOS(code);\
+#define GEN_JUMP_TO(code, b, ip)	{uint16_t __pos__;gen(code,b);__pos__=CURPOS(code);\
 					     gen16(code,0);patch16(code,__pos__,ip-CURPOS(code));}
 
 /***************************************************************************/
@@ -260,7 +260,7 @@ PRIVATE void patch16(CODE c, u16 o, u16 w) {
 PRIVATE int expr_parse(CODE code);	/* Prototype */
 
 PRIVATE void compile_varref(CODE code, OVECTOR name) {
-  u16 frame, offset;
+  uint16_t frame, offset;
 
   if (lookup(code, name, &frame, &offset)) {
     gen(code, OP_MOV_A_LOCL);
@@ -281,7 +281,7 @@ PRIVATE int compile_methodreference(CODE code, int asmethod) {
 
   if (CHECK('(')) { 
     int argc = 0;
-    u16 argcloc;
+    uint16_t argcloc;
 
     DROP();
 
@@ -336,7 +336,7 @@ PRIVATE int applic_parse(CODE code, OVECTOR currid, int lvalue, int isslot) {
   while (1) {
     if (CHECK('(')) {
       int argc = 0;
-      u16 argcloc;
+      uint16_t argcloc;
 
       DROP();
 
@@ -408,7 +408,7 @@ PRIVATE int applic_parse(CODE code, OVECTOR currid, int lvalue, int isslot) {
 	gen(code, OP_MOV_SLOT_A);
 	GEN_LIT(code, currid);
       } else {
-	u16 frame, offset;
+	uint16_t frame, offset;
 
 	if (lookup(code, currid, &frame, &offset)) {
 	  gen(code, OP_MOV_LOCL_A);
@@ -435,7 +435,7 @@ PRIVATE int applic_parse(CODE code, OVECTOR currid, int lvalue, int isslot) {
     lvalue = isslot = 0;
 
     if (CHECK('[')) {
-      u16 pos;
+      uint16_t pos;
 
       DROP();
 
@@ -748,7 +748,7 @@ PRIVATE int and_op_parse(CODE code) {
     return 0;
 
   if (CHKOP("&&")) {
-    u16 and_next, and_end;
+    uint16_t and_next, and_end;
 
     DROP();
     gen(code, OP_JUMP_TRUE);
@@ -772,7 +772,7 @@ PRIVATE int or_op_parse(CODE code) {
     return 0;
 
   if (CHKOP("||")) {
-    u16 or_next, or_end;
+    uint16_t or_next, or_end;
 
     DROP();
     gen(code, OP_JUMP_FALSE);
@@ -843,7 +843,7 @@ PRIVATE OVECTOR compile_template(CODE code, int argc) {
 
   gen(code, OP_RET);
 
-  template = newcompilertemplate(argc, (byte *) code->buf->buf, code->buf->pos,
+  template = newcompilertemplate(argc, (uint8_t *) code->buf->buf, code->buf->pos,
 				 list_to_vector(code->littab));
 
   code->littab = olittab;
@@ -856,7 +856,7 @@ PRIVATE OVECTOR compile_template(CODE code, int argc) {
 PRIVATE int expr_parse(CODE code) {
   if (CHECK(K_DEFINE)) {
     OVECTOR name;
-    u16 frame, offset;
+    uint16_t frame, offset;
 
     DROP();
 
@@ -1062,7 +1062,7 @@ PRIVATE int expr_parse(CODE code) {
   }
 
   if (CHECK(K_IF)) {
-    u16 false_jmp, end_jmp;
+    uint16_t false_jmp, end_jmp;
 
     DROP();
 
@@ -1108,7 +1108,7 @@ PRIVATE int expr_parse(CODE code) {
   }
 
   if (CHECK(K_WHILE)) {
-    u16 loop_test, loop_end;
+    uint16_t loop_test, loop_end;
 
     DROP();
 
@@ -1136,7 +1136,7 @@ PRIVATE int expr_parse(CODE code) {
   }
 
   if (CHECK('{')) {
-    u16 pos;
+    uint16_t pos;
 
     DROP();
 
@@ -1253,7 +1253,7 @@ PUBLIC OVECTOR parse(VMSTATE vms, SCANINST scaninst) {
 
   gen(code, OP_RET);
 
-  template = newcompilertemplate(0, (byte *) code->buf->buf, code->buf->pos,
+  template = newcompilertemplate(0, (uint8_t *) code->buf->buf, code->buf->pos,
 				 list_to_vector(code->littab));
   killcode(code);
   return template;

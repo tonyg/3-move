@@ -131,16 +131,16 @@ typedef enum UserHashLinkSlots {
 
 typedef struct Obj {
   OBJ next;			/* Next in all-objects-list. */
-  u32 kind: 2;			/* 00, 01, 10, 11; kind of object */
-  u32 marked: 1;
-  u32 length: 29;
+  uint32_t kind: 2;			/* 00, 01, 10, 11; kind of object */
+  uint32_t marked: 1;
+  uint32_t length: 29;
 } Obj;
 
 typedef struct Object {
   Obj _;
 
-  u32 finalize: 1;		/* Is this instance finalizable? */
-  u32 flags: 31;		/* Flags for this object */
+  uint32_t finalize: 1;		/* Is this instance finalizable? */
+  uint32_t flags: 31;		/* Flags for this object */
 
   OVECTOR methods;		/* Methods hashtable. */
   OVECTOR attributes;		/* Attributes hashtable. */
@@ -169,17 +169,17 @@ typedef struct BVector {
   Obj _;
 
 #ifdef __GNUC__
-  byte vec[0];			/* Contents */
+  uint8_t vec[0];			/* Contents */
 #else
-  byte vec[1];
+  uint8_t vec[1];
 #endif
 } BVector;
 
 typedef struct OVector {
   Obj _;
 
-  u32 finalize: 1;
-  u32 type: 31;		/* Kind of Opaque Vector - should really be enum OVectorTypes */
+  uint32_t finalize: 1;
+  uint32_t type: 31;		/* Kind of Opaque Vector - should really be enum OVectorTypes */
 
 #ifdef __GNUC__
   OBJ vec[0];			/* Contents */

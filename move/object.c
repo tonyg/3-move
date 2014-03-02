@@ -106,7 +106,7 @@ PUBLIC VECTOR vector_clone(VECTOR v) {
 }
 
 PUBLIC BVECTOR newbvector_noinit(int len) {
-  BVECTOR bv = (BVECTOR) getmem(sizeof(BVector) + len * sizeof(byte), KIND_BVECTOR, len);
+  BVECTOR bv = (BVECTOR) getmem(sizeof(BVector) + len * sizeof(uint8_t), KIND_BVECTOR, len);
 
   return bv;
 }

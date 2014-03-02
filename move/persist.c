@@ -91,7 +91,7 @@ PRIVATE int find_obj(PDATA p, int num, OBJ *result) {
 }
 
 PRIVATE int find_num(PDATA p, OBJ obj) {
-  PMAP curr = p->table[(int) obj % TABLE_SIZE];
+  PMAP curr = p->table[(intptr_t) obj % TABLE_SIZE];
 
   while (curr != NULL) {
     if (curr->o == obj)
@@ -115,7 +115,7 @@ PRIVATE void bind_object(PDATA p, int num, OBJ obj) {
 
 PRIVATE void bind_number(PDATA p, int num, OBJ obj) {
   PMAP m = allocmem(sizeof(PMap));
-  int idx = (int) obj % TABLE_SIZE;
+  int idx = (intptr_t) obj % TABLE_SIZE;
 
   m->n = num;
   m->o = obj;
@@ -126,12 +126,12 @@ PRIVATE void bind_number(PDATA p, int num, OBJ obj) {
 /***********************************************************************/
 
 PUBLIC void *start_save(FILE *dest) {
-  u32 version = (u32) htonl(DEFAULT_DBFMT);
+  uint32_t version = (uint32_t) htonl(DEFAULT_DBFMT);
   PDATA p = newpdata(dest);
 
   rewind(dest);
   fwrite(DBFMT_SIGNATURE, 1, DBFMT_SIG_LEN, dest);
-  fwrite(&version, sizeof(u32), 1, dest);
+  fwrite(&version, sizeof(uint32_t), 1, dest);
   p->db_version = DEFAULT_DBFMT;
 
   return (void *) p;
@@ -143,7 +143,7 @@ PUBLIC void end_save(void *handle) {
 
 PUBLIC void save(void *handle, OBJ root) {
   PDATA p = (PDATA) handle;
-  i32 n;
+  int32_t n;
   
   if (root == NULL) {
     fputc('N', p->f);
@@ -152,13 +152,13 @@ PUBLIC void save(void *handle, OBJ root) {
 
   if (TAGGEDP(root)) {
     if (NUMP(root)) {
-      i32 val = (i32) htonl(NUM(root));
+      int32_t val = (int32_t) htonl(NUM(root));
       fputc('I', p->f);
-      fwrite(&val, sizeof(i32), 1, p->f);
+      fwrite(&val, sizeof(int32_t), 1, p->f);
     } else if (SINGLETONP(root)) {
-      byte val = (byte) DETAG(root);
+      uint8_t val = (uint8_t) DETAG(root);
       fputc('S', p->f);
-      fwrite(&val, sizeof(byte), 1, p->f);
+      fwrite(&val, sizeof(uint8_t), 1, p->f);
     } else {
       fprintf(stderr, "Invalid TAGGEDP object (%p) in save of DEFAULT_DBFMT.\n", root);
       exit(MOVE_EXIT_DBFMT_ERROR);
@@ -171,7 +171,7 @@ PUBLIC void save(void *handle, OBJ root) {
 
   if (n != -1) {
     fputc('R', p->f);
-    n = (i32) htonl(n);
+    n = (int32_t) htonl(n);
     fwrite(&n, sizeof(int), 1, p->f);
     return;
   }
@@ -180,20 +180,20 @@ PUBLIC void save(void *handle, OBJ root) {
   bind_number(p, n, root);
 
   fputc('O', p->f);
-  n = (i32) htonl(n);
-  fwrite(&n, sizeof(i32), 1, p->f);
+  n = (int32_t) htonl(n);
+  fwrite(&n, sizeof(int32_t), 1, p->f);
 
   {
-    u32 u_n = (u32) htonl(((u32) root->length << 2) | root->kind);
-    fwrite(&u_n, sizeof(u32), 1, p->f);
+    uint32_t u_n = (uint32_t) htonl(((uint32_t) root->length << 2) | root->kind);
+    fwrite(&u_n, sizeof(uint32_t), 1, p->f);
   }
 
   switch (root->kind) {
     case KIND_OBJECT: {
       OBJECT oroot = (OBJECT) root;
-      u32 u = (u32) htonl((oroot->flags << 1) | oroot->finalize);
+      uint32_t u = (uint32_t) htonl((oroot->flags << 1) | oroot->finalize);
 
-      fwrite(&u, sizeof(u32), 1, p->f);
+      fwrite(&u, sizeof(uint32_t), 1, p->f);
       save(handle, (OBJ) oroot->methods);
       save(handle, (OBJ) oroot->attributes);
       save(handle, oroot->parents);
@@ -205,15 +205,15 @@ PUBLIC void save(void *handle, OBJ root) {
     }
 
     case KIND_BVECTOR:
-      fwrite(((BVECTOR) root)->vec, sizeof(byte), root->length, p->f);
+      fwrite(((BVECTOR) root)->vec, sizeof(uint8_t), root->length, p->f);
       break;
 
     case KIND_OVECTOR: {
       OVECTOR oroot = (OVECTOR) root;
       int i;
-      u32 u = (u32) htonl((oroot->type << 1) | oroot->finalize);
+      uint32_t u = (uint32_t) htonl((oroot->type << 1) | oroot->finalize);
 
-      fwrite(&u, sizeof(u32), 1, p->f);
+      fwrite(&u, sizeof(uint32_t), 1, p->f);
 
       if (oroot->type == T_CONNECTION) {
 	for (i = 0; i < CO_MAXSLOTINDEX; i++)
@@ -239,15 +239,15 @@ PUBLIC void save(void *handle, OBJ root) {
 
 PUBLIC void *start_load(FILE *source) {
   PDATA p = newpdata(source);
-  byte sig[DBFMT_SIG_LEN];
-  u32 version;
+  uint8_t sig[DBFMT_SIG_LEN];
+  uint32_t version;
 
   rewind(source);
   fread(sig, 1, DBFMT_SIG_LEN, source);
-  fread(&version, sizeof(u32), 1, source);
+  fread(&version, sizeof(uint32_t), 1, source);
 
   if (!memcmp(DBFMT_SIGNATURE, sig, DBFMT_SIG_LEN)) {
-    p->db_version = (u32) ntohl(version);
+    p->db_version = (uint32_t) ntohl(version);
   } else {
     rewind(source);
     p->db_version = DBFMT_OLDFMT;
@@ -294,16 +294,16 @@ PRIVATE OBJ load_OLDFMT(PDATA p) {
       switch (hdr.kind) {
 	case KIND_OBJECT: {
 	  OBJECT obj;
-	  byte b;
-	  u32 u;
+	  uint8_t b;
+	  uint32_t u;
 
 	  o = getmem(sizeof(Object), KIND_OBJECT, 0);
 	  bind_object(p, n, o);
 	  obj = (OBJECT) o;
 
-	  fread(&b, sizeof(byte), 1, p->f);
+	  fread(&b, sizeof(uint8_t), 1, p->f);
 	  obj->finalize = b;
-	  fread(&u, sizeof(u32), 1, p->f);
+	  fread(&u, sizeof(uint32_t), 1, p->f);
 	  obj->flags = u;
 
 	  obj->methods = (OVECTOR) load_OLDFMT(p);
@@ -321,17 +321,17 @@ PRIVATE OBJ load_OLDFMT(PDATA p) {
 	case KIND_BVECTOR:
 	  o = (OBJ) newbvector(hdr.length);
 	  bind_object(p, n, o);
-	  fread(((BVECTOR) o)->vec, sizeof(byte), hdr.length, p->f);
+	  fread(((BVECTOR) o)->vec, sizeof(uint8_t), hdr.length, p->f);
 	  return o;
 
 	case KIND_OVECTOR: {
 	  OVECTOR obj;
 	  int i;
-	  byte b;
-	  u32 u;
+	  uint8_t b;
+	  uint32_t u;
 
-	  fread(&b, sizeof(byte), 1, p->f);
-	  fread(&u, sizeof(u32), 1, p->f);
+	  fread(&b, sizeof(uint8_t), 1, p->f);
+	  fread(&u, sizeof(uint32_t), 1, p->f);
 
 	  obj = newovector_noinit(hdr.length, u);
 	  o = (OBJ) obj;
@@ -368,7 +368,7 @@ PRIVATE OBJ load_OLDFMT(PDATA p) {
 }
 
 PRIVATE OBJ load_NET_32(PDATA p) {
-  i32 n;
+  int32_t n;
   char t;
 
   t = fgetc(p->f);
@@ -377,21 +377,21 @@ PRIVATE OBJ load_NET_32(PDATA p) {
     case 'N': return NULL;
 
     case 'I': {
-      i32 val;
-      fread(&val, sizeof(i32), 1, p->f);
-      return MKNUM((i32) ntohl(val));
+      int32_t val;
+      fread(&val, sizeof(int32_t), 1, p->f);
+      return MKNUM((int32_t) ntohl(val));
     }
 
     case 'S': {
-      byte val;
-      fread(&val, sizeof(byte), 1, p->f);
-      return MKSINGLETON((int) val);
+      uint8_t val;
+      fread(&val, sizeof(uint8_t), 1, p->f);
+      return MKSINGLETON((uintptr_t) val);
     }
 
     case 'R': {
       OBJ o;
-      fread(&n, sizeof(i32), 1, p->f);
-      n = (i32) ntohl(n);
+      fread(&n, sizeof(int32_t), 1, p->f);
+      n = (int32_t) ntohl(n);
       if (!find_obj(p, n, &o)) {
 	fprintf(stderr, "error loading database! object not found by number (%d)!\n", n);
 	exit(MOVE_EXIT_DBFMT_ERROR);
@@ -400,14 +400,14 @@ PRIVATE OBJ load_NET_32(PDATA p) {
     } 
 
     case 'O': {
-      u32 u_n;
+      uint32_t u_n;
       OBJ o;
-      u32 u_kind, u_length;
+      uint32_t u_kind, u_length;
 
-      fread(&n, sizeof(i32), 1, p->f);
-      n = (i32) ntohl(n);
-      fread(&u_n, sizeof(u32), 1, p->f);
-      u_n = (u32) ntohl(u_n);
+      fread(&n, sizeof(int32_t), 1, p->f);
+      n = (int32_t) ntohl(n);
+      fread(&u_n, sizeof(uint32_t), 1, p->f);
+      u_n = (uint32_t) ntohl(u_n);
 
       u_kind = u_n & 3;
       u_length = u_n >> 2;
@@ -415,14 +415,14 @@ PRIVATE OBJ load_NET_32(PDATA p) {
       switch (u_kind) {
 	case KIND_OBJECT: {
 	  OBJECT obj;
-	  u32 u;
+	  uint32_t u;
 
 	  o = getmem(sizeof(Object), KIND_OBJECT, 0);
 	  bind_object(p, n, o);
 	  obj = (OBJECT) o;
 
-	  fread(&u, sizeof(u32), 1, p->f);
-	  u = (u32) ntohl(u);
+	  fread(&u, sizeof(uint32_t), 1, p->f);
+	  u = (uint32_t) ntohl(u);
 	  obj->finalize = u & 1;
 	  obj->flags = u >> 1;
 
@@ -441,16 +441,16 @@ PRIVATE OBJ load_NET_32(PDATA p) {
 	case KIND_BVECTOR:
 	  o = (OBJ) newbvector(u_length);
 	  bind_object(p, n, o);
-	  fread(((BVECTOR) o)->vec, sizeof(byte), u_length, p->f);
+	  fread(((BVECTOR) o)->vec, sizeof(uint8_t), u_length, p->f);
 	  return o;
 
 	case KIND_OVECTOR: {
 	  OVECTOR obj;
 	  int i;
-	  u32 u;
+	  uint32_t u;
 
-	  fread(&u, sizeof(u32), 1, p->f);
-	  u = (u32) ntohl(u);
+	  fread(&u, sizeof(uint32_t), 1, p->f);
+	  u = (uint32_t) ntohl(u);
 	  obj = newovector_noinit(u_length, u >> 1);
 	  o = (OBJ) obj;
 	  bind_object(p, n, o);

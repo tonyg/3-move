@@ -47,7 +47,7 @@ PRIVATE BVECTOR getPrintString_body(VMSTATE vms, OBJ x, int depth) {
     return newstring("null");
 
   if (NUMP(x)) {
-    sprintf(buf, "%d", NUM(x));
+    sprintf(buf, "%ld", (long) NUM(x));
     return newstring(buf);
   }
 

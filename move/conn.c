@@ -156,7 +156,7 @@ PRIVATE int nullconn_getter(void *arg) {
 			      CONN_RET_ERROR)
 
 PRIVATE int conn_gets(BVECTOR buf, int offs, int size, OVECTOR conn) {
-  byte *s = buf->vec + offs;
+  uint8_t *s = buf->vec + offs;
   int c;
 
   if (conn_closed(conn))

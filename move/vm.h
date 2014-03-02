@@ -44,8 +44,8 @@ typedef struct VMregs {
 } VMregs, *VMREGS;
 
 typedef struct VMregs_C {
-  i32		vm_ip;		/* Instruction pointer */
-  i32		vm_top;		/* Top of stack (ascending, empty) */
+  int32_t	vm_ip;		/* Instruction pointer */
+  int32_t	vm_top;		/* Top of stack (ascending, empty) */
   int		vm_state;	/* Status of Virtual Machine, see below */
   int		vm_locked_count;	/* Recursive lock count of vm_locked */
 } VMregs_C, *VMREGS_C;
@@ -66,7 +66,7 @@ typedef struct VMstate {
 /* VM API								*/
 
 extern char *checkpoint_filename;
-extern u32 synch_bitmap;	/* If nonzero, synchronization desired */
+extern uint32_t synch_bitmap;	/* If nonzero, synchronization desired */
 
 /* Values for synch_bitmap: */
 #define SYNCH_GC		0x00000001	/* Force a GC */
