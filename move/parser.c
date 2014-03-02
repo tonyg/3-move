@@ -1009,7 +1009,7 @@ PRIVATE int expr_parse(CODE code) {
 	  return 0;
       } else {
 	gen(code, OP_MOV_A_LITL);
-	gen(code, undefined);
+	GEN_LIT(code, undefined);
       }
     } else {
       ERR("Invalid token following define");
