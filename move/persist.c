@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include <netinet/in.h>
 
@@ -237,14 +238,26 @@ PUBLIC void save(void *handle, OBJ root) {
 
 /***********************************************************************/
 
+PUBLIC void checked_fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  if (fread(ptr, size, nmemb, stream) != nmemb) {
+    if (feof(stream)) {
+      fprintf(stderr, "Unexpected end-of-file loading database\n");
+    } else {
+      errno = ferror(stream);
+      perror("fread during load");
+    }
+    exit(MOVE_EXIT_DBFMT_ERROR);
+  }
+}
+
 PUBLIC void *start_load(FILE *source) {
   PDATA p = newpdata(source);
   uint8_t sig[DBFMT_SIG_LEN];
   uint32_t version;
 
   rewind(source);
-  fread(sig, 1, DBFMT_SIG_LEN, source);
-  fread(&version, sizeof(uint32_t), 1, source);
+  checked_fread(sig, 1, DBFMT_SIG_LEN, source);
+  checked_fread(&version, sizeof(uint32_t), 1, source);
 
   if (!memcmp(DBFMT_SIGNATURE, sig, DBFMT_SIG_LEN)) {
     p->db_version = (uint32_t) ntohl(version);
@@ -270,13 +283,13 @@ PRIVATE OBJ load_OLDFMT(PDATA p) {
     case 'N': return NULL;
     case 'L': {
       OBJ o;
-      fread(&o, sizeof(OBJ), 1, p->f);
+      checked_fread(&o, sizeof(OBJ), 1, p->f);
       return o;
     }
 
     case 'R': {
       OBJ o;
-      fread(&n, sizeof(int), 1, p->f);
+      checked_fread(&n, sizeof(int), 1, p->f);
       if (!find_obj(p, n, &o)) {
 	fprintf(stderr, "error loading database! object not found by number (%d)!\n", n);
 	exit(MOVE_EXIT_DBFMT_ERROR);
@@ -288,8 +301,8 @@ PRIVATE OBJ load_OLDFMT(PDATA p) {
       Obj hdr;
       OBJ o;
 
-      fread(&n, sizeof(int), 1, p->f);
-      fread(&hdr, sizeof(Obj), 1, p->f);
+      checked_fread(&n, sizeof(int), 1, p->f);
+      checked_fread(&hdr, sizeof(Obj), 1, p->f);
 
       switch (hdr.kind) {
 	case KIND_OBJECT: {
@@ -301,9 +314,9 @@ PRIVATE OBJ load_OLDFMT(PDATA p) {
 	  bind_object(p, n, o);
 	  obj = (OBJECT) o;
 
-	  fread(&b, sizeof(uint8_t), 1, p->f);
+	  checked_fread(&b, sizeof(uint8_t), 1, p->f);
 	  obj->finalize = b;
-	  fread(&u, sizeof(uint32_t), 1, p->f);
+	  checked_fread(&u, sizeof(uint32_t), 1, p->f);
 	  obj->flags = u;
 
 	  obj->methods = (OVECTOR) load_OLDFMT(p);
@@ -321,7 +334,7 @@ PRIVATE OBJ load_OLDFMT(PDATA p) {
 	case KIND_BVECTOR:
 	  o = (OBJ) newbvector(hdr.length);
 	  bind_object(p, n, o);
-	  fread(((BVECTOR) o)->vec, sizeof(uint8_t), hdr.length, p->f);
+	  checked_fread(((BVECTOR) o)->vec, sizeof(uint8_t), hdr.length, p->f);
 	  return o;
 
 	case KIND_OVECTOR: {
@@ -330,8 +343,8 @@ PRIVATE OBJ load_OLDFMT(PDATA p) {
 	  uint8_t b;
 	  uint32_t u;
 
-	  fread(&b, sizeof(uint8_t), 1, p->f);
-	  fread(&u, sizeof(uint32_t), 1, p->f);
+	  checked_fread(&b, sizeof(uint8_t), 1, p->f);
+	  checked_fread(&u, sizeof(uint32_t), 1, p->f);
 
 	  obj = newovector_noinit(hdr.length, u);
 	  o = (OBJ) obj;
@@ -378,19 +391,19 @@ PRIVATE OBJ load_NET_32(PDATA p) {
 
     case 'I': {
       int32_t val;
-      fread(&val, sizeof(int32_t), 1, p->f);
+      checked_fread(&val, sizeof(int32_t), 1, p->f);
       return MKNUM((int32_t) ntohl(val));
     }
 
     case 'S': {
       uint8_t val;
-      fread(&val, sizeof(uint8_t), 1, p->f);
+      checked_fread(&val, sizeof(uint8_t), 1, p->f);
       return MKSINGLETON((uintptr_t) val);
     }
 
     case 'R': {
       OBJ o;
-      fread(&n, sizeof(int32_t), 1, p->f);
+      checked_fread(&n, sizeof(int32_t), 1, p->f);
       n = (int32_t) ntohl(n);
       if (!find_obj(p, n, &o)) {
 	fprintf(stderr, "error loading database! object not found by number (%d)!\n", n);
@@ -404,9 +417,9 @@ PRIVATE OBJ load_NET_32(PDATA p) {
       OBJ o;
       uint32_t u_kind, u_length;
 
-      fread(&n, sizeof(int32_t), 1, p->f);
+      checked_fread(&n, sizeof(int32_t), 1, p->f);
       n = (int32_t) ntohl(n);
-      fread(&u_n, sizeof(uint32_t), 1, p->f);
+      checked_fread(&u_n, sizeof(uint32_t), 1, p->f);
       u_n = (uint32_t) ntohl(u_n);
 
       u_kind = u_n & 3;
@@ -421,7 +434,7 @@ PRIVATE OBJ load_NET_32(PDATA p) {
 	  bind_object(p, n, o);
 	  obj = (OBJECT) o;
 
-	  fread(&u, sizeof(uint32_t), 1, p->f);
+	  checked_fread(&u, sizeof(uint32_t), 1, p->f);
 	  u = (uint32_t) ntohl(u);
 	  obj->finalize = u & 1;
 	  obj->flags = u >> 1;
@@ -441,7 +454,7 @@ PRIVATE OBJ load_NET_32(PDATA p) {
 	case KIND_BVECTOR:
 	  o = (OBJ) newbvector(u_length);
 	  bind_object(p, n, o);
-	  fread(((BVECTOR) o)->vec, sizeof(uint8_t), u_length, p->f);
+	  checked_fread(((BVECTOR) o)->vec, sizeof(uint8_t), u_length, p->f);
 	  return o;
 
 	case KIND_OVECTOR: {
@@ -449,7 +462,7 @@ PRIVATE OBJ load_NET_32(PDATA p) {
 	  int i;
 	  uint32_t u;
 
-	  fread(&u, sizeof(uint32_t), 1, p->f);
+	  checked_fread(&u, sizeof(uint32_t), 1, p->f);
 	  u = (uint32_t) ntohl(u);
 	  obj = newovector_noinit(u_length, u >> 1);
 	  o = (OBJ) obj;
