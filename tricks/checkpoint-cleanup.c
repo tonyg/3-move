@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include <sys/types.h>
+#include <unistd.h>
 #include <dirent.h>
 
 #define MINDELAY 10
