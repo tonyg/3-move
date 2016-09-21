@@ -45,10 +45,7 @@ static void cleanup(int keepnum) {
   struct dirent **list;
   int i, n;
 
-  n = scandir(".",
-	      &list,
-	      (int (*)(struct dirent *)) selector,
-	      (int (*)(void const *, void const *)) sorter);
+  n = scandir(".", &list, selector, sorter);
 
   if (n > keepnum) {
     for (i = 0; i < n - keepnum; i++) {
