@@ -55,7 +55,7 @@ move-to(Login, null);
 "\n"
 "3-MOVE Copyright (C) 1997--2009 Tony Garnock-Jones.\n"
 "This program comes with ABSOLUTELY NO WARRANTY; for details see\n"
-"http://homepages.kcbbs.gen.nz/tonyg/projects/3-move.html.\n"
+"https://leastfixedpoint.com/tonyg/kcbbs/projects/3-move.html.\n"
 "This is free software, and you are welcome to redistribute it\n"
 "under certain conditions; see http://github.com/tonyg/3-move for\n"
 "details.\n"
